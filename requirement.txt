@@ -6,3 +6,4 @@ peft==0.17.1
 accelerate==1.7.0
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
+PyJWT==2.10.1
