@@ -1,0 +1,166 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Modèle d'IA et servi par Ollama}
+\label{sec:modele}
+
+\subsection{Modèle retenu}
+
+Le module s'appuie sur \texttt{mistral:7b-instruct-v0.2-q4\_K\_M} servi par
+Ollama \texttt{0.40.11} : 7\,Md de paramètres, quantification \texttt{Q4\_K\_M},
+fichier de 4\,369\,387\,721 octets (4,07~Gio), famille \texttt{llama}
+(relevé sur \texttt{/api/tags}). La machine de référence est un
+portable équipé d'une NVIDIA GeForce RTX 3050 Ti Laptop de 4096~Mio
+(chauffeur 555.99), partagée avec le Module 1.
+
+\textbf{Pourquoi Mistral-7B.} Trois contraintes matérielles convergent.
+(1)~La VRAM disponible est de 4~Gio et doit rester partagée avec Qwen3-0.6B
+\,+\,LoRA du Module 1 : un 8\,Md en \texttt{q4\_K\_M} avec son cache KV ne tient
+pas, un 7\,Md en tient tout juste (§\ref{sec:perf-numgpu}). (2)~La variante
+\texttt{instruct} est nécessaire : le module demande une sortie JSON conforme,
+pas une complétion libre. (3)~v0.2 est la version dont le gabarit
+\verb|<s>[INST] <<SYS>> ... <</SYS>> instruction [/INST]| est documenté
+explicitement, ce qui est indispensable puisque le module assemble lui-même ce
+gabarit (§\ref{sec:modele-raw}). La qualité relative des familles sur les
+critères d'entretien n'a pas été mesurée ici : \NM{} (aucun benchmark
+inter-modèles n'a été lancé).
+
+\textbf{Pourquoi \texttt{q4\_K\_M}.} C'est le compromis mémoire/qualité standard
+pour un 7\,Md sur 4~Gio : \texttt{q8\_0} (\textasciitilde{}7,7~Gio) ne tient pas
+en VRAM et \texttt{q2\_K} dégrade la tenue du format JSON. L'effet de la
+quantification sur la qualité des scores n'a pas été mesuré : \NM{}.
+
+\subsection{Servi par Ollama, pas par Transformers en processus}
+\label{sec:modele-ollama}
+
+Ollama tourne comme démon à part sur \texttt{localhost:11434} ; le module ne lui
+parle que par HTTP (\file{llm\_adam.py}), sans importer \texttt{torch}. Ce choix
+n'est pas cosmétique : le Module 1 charge déjà Torch et son LoRA dans le
+processus serveur. Un second modèle dans le même processus aurait cumulé deux
+allocations CUDA sous le même limiteur, sans moyen de libérer l'une sans
+l'autre ; la frontière HTTP permet au contraire un
+\texttt{keep\_alive} court et un endpoint de libération explicite
+(§\ref{sec:perf-vram}).
+
+\subsection{\texttt{raw=true} et assemblage manuel du gabarit}
+\label{sec:modele-raw}
+
+\begin{lstlisting}[style=adamcode, caption={Payload envoyé à \texttt{/api/generate} (\file{llm\_adam.py}, méthode \texttt{generate\_json}, lignes 145--161) ; \texttt{num\_gpu} n'est ajouté que si \texttt{ADAM\_MISTRAL\_NUM\_GPU} $\geq$ 0.}, label={lst:payload}]
+payload = {
+    "model": self.model,
+    "prompt": prompt,
+    "raw": True,
+    "stream": False,
+    "format": schema,
+    "keep_alive": cfg.KEEP_ALIVE,
+    "options": {
+        "temperature": temperature,
+        "num_predict": max_tokens or cfg.MAX_NEW_TOKENS,
+        "num_ctx": cfg.NUM_CTX,
+        "repeat_penalty": 1.1,
+    },
+}
+if cfg.NUM_GPU >= 0:
+    payload["options"]["num_gpu"] = cfg.NUM_GPU
+\end{lstlisting}
+
+Le module n'utilise \textbf{pas} \texttt{/api/chat}. Ce endpoint applique son
+propre template de conversation au message reçu ; comme les prompts du module
+commencent déjà par \verb|[INST] <<SYS>>|, l'usage de \texttt{/api/chat}
+aurait produit un gabarit doublement emballé --- un \texttt{[INST]} à
+l'intérieur du contenu d'un autre --- auquel le modèle répond par du texte
+hors sujet ou par une répétition du séparateur. \texttt{raw=true} envoie la
+chaîne telle quelle : la responsabilité du formatage revient entièrement au
+module, ce qui est le prix à payer pour un contrôle total (et pour la
+neutralisation des injections, §\ref{sec:sec-inject}).
+
+Conséquence symétrique, documentée dans la liste des limites : \texttt{raw=true}
+ne renvoie pas de liste de contexte, donc chaque appel est autonome. Questions,
+évaluation et amélioration ne partagent pas de mémoire de conversation --- ce
+qui correspond exactement à l'usage (§\ref{sec:archi}), mais interdit
+naturellement un « relance la question 2 en plus court ».
+
+\subsection{\texttt{format} : schéma JSON, sans garantie de grammaire}
+\label{sec:modele-format}
+
+Le schéma Pydantic de chaque étape est sérialisé en JSON Schema aplati et passé
+dans \texttt{format} (les schémas complets sont reproduits en
+§\ref{sec:prompts-schemas}). Ollama convertit ce schéma en contrainte de décodage
+interne, \emph{mais} la documentation Ollama précise elle-même qu'il « est
+important d'instruire le modèle vers du JSON dans le prompt » et qu'il est
+« idéal de passer aussi le schéma JSON en chaîne dans le prompt ». Rien dans
+cette documentation, ni dans nos journaux, n'établit que la grammaire soit
+effectivement appliquée à Mistral en mode \texttt{raw}.
+
+Le module ne repose donc jamais sur \texttt{format} seul : trois garde-fous lui
+sont adjoints, décrits en §\ref{sec:prompts-validation}. (1)~chaque \texttt{SYSTEM}
+énonce son contrat de sortie en toutes lettres (par exemple « FORMAT : renvoie
+exactement \verb|{"questions": [...]}| ») et se termine par le rappel court
+\texttt{FORMAT\_REMINDER} ; (2)~le schéma complet, lui, n'est recopié en texte
+que dans le prompt de réparation --- là où il sert à montrer la forme fautive ;
+(3)~la sortie est validée par Pydantic, réparée une fois, puis remplacée par un
+repli. Mesuré sur la calibration
+(§\ref{sec:tests-calibration}) : \textbf{10 réponses sur 10 valides dès le
+premier essai, 0 réparation déclenchée, 0 repli}. \texttt{format} est donc
+traité comme une aide statistique, pas comme une garantie.
+
+\subsection{Paramètres de génération}
+\label{sec:modele-params}
+
+\begin{small}
+\begin{table}[H]
+\centering
+\caption{Températures et budgets de sortie réellement utilisés.}
+\label{tab:budgets}
+\begin{tabular}{@{}>{\cellflush}p{2.9cm} l l
+                >{\cellflush}p{5.9cm}@{}}
+\toprule
+\textbf{Étape} & \textbf{Temp.} & \textbf{\texttt{num\_predict}} & \textbf{Justification} \\
+\midrule
+Questions (\file{service.py}:175) & 0,6 & $\min(1400,\;120+170n)$ & Variété recherchée d'une séance à l'autre ; le budget suit le nombre de questions demandées (3$\to$630, 5$\to$970, 8$\to$1400 plafonné). \\
+\addlinespace
+Évaluation (\file{service.py}:223) & 0,2 & 420 & Stabilité : deux évaluations d'une même réponse doivent converger. Température basse, sortie bornée. \\
+\addlinespace
+Amélioration (\file{service.py}:271) & 0,4 & 520 & Compromis : reformulation un peu créative (STAR rédigée) mais cadrée par les lacunes diagnostiquées. \\
+\addlinespace
+Réparation (\file{service.py}:110) & 0,1 & identique à l'appel d'origine & Tâche de reformatage pur : la créativité ne sert à rien, elle augmente le risque de dérive sémantique. \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{small}
+
+Les deux autres options sont globales : \texttt{num\_ctx} à 8192 tokens
+(\texttt{ADAM\_MISTRAL\_NUM\_CTX}) --- au-delà, le cache KV seul dévorerait la
+VRAM du Module 1 --- et \texttt{repeat\_penalty} à 1,1, retenu après l'observation
+de boucles de répétition sur les réponses longues en CPU.
+
+\subsection{Budget de contexte : la contrainte qui a dimensionné le prompt}
+\label{sec:modele-budget}
+
+8192 tokens de contexte, pour un prompt d'environ 1800 tokens
+(§\ref{sec:prompts-taille}), laisse une marge de génération cohérente avec les
+budgets ci-dessus. Le module ne dépasse jamais cette fenêtre, et c'est un des
+motifs du raccourcissement des prompts : un prompt de 8520 caractères (état
+initial des questions) consommait déjà une part dominante du contexte, ce qui ralentissait
+le préfill et, en CPU, allongeait la latence perçue d'autant.
+
+\subsection{Libération de la mémoire}
+\label{sec:modele-release}
+
+\texttt{keep\_alive} vaut \texttt{5m} par défaut
+(\texttt{ADAM\_MISTRAL\_KEEP\_ALIVE}) : au-delà de cinq minutes sans appel,
+Ollama décharge Mistral de lui-même. La méthode \texttt{release()}
+(\file{llm\_adam.py}:215--229) force la même libération plus tôt en envoyant une
+requête \texttt{keep\_alive: 0} avec un prompt vide ; elle est exposée sur
+\texttt{POST /interview/release} et appelée par le navigateur à la fermeture de
+l'onglet. Son échec est silencieux par conception : c'est un confort, pas une
+condition de correction. La limite connue (une libération pendant une génération
+en cours ne libère rien) est mesurée et discutée en §\ref{sec:perf-vram}.
+
+\subsection{Contrôle de disponibilité}
+
+Avant tout appel, l'UI interroge un diagnostic qui s'appuie sur
+\texttt{is\_available()} (\file{llm\_adam.py}:231--245) : un \texttt{GET
+/api/tags} avec timeout \texttt{(5, 10)}, puis une comparaison du nom demandé,
+avec repli sur le préfixe avant \texttt{:} pour accepter
+\texttt{mistral:latest} si l'étiquette exacte a changé. Trois états en
+découlent, traduits en messages français (§\ref{sec:sec-erreurs}) : démon
+absent, modèle absent, modèle prêt.

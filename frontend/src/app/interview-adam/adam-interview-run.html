@@ -1,0 +1,197 @@
+<!-- Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI, IA for Software Engineering 2026-2027 -->
+<div class="run">
+  <!-- ===================== Contexte + progression ===================== -->
+  <div class="run-head">
+    <div class="run-ctx">
+      <strong>{{ context()?.job_title }}</strong>
+      @if (context()?.company) { <span>· {{ context()!.company }}</span> }
+      <span class="chip">{{ seniorityLabel(context()?.seniority ?? '') }}</span>
+      <span class="chip">{{ typeLabel(context()?.question_type ?? '') }}</span>
+      @if (context()?.cv_used) { <span class="chip ok">CV utilisé</span> }
+      @if (ragUsed()) { <span class="chip ok">Base documentaire</span> }
+    </div>
+    <div class="run-progress">
+      <div class="bar"><div class="fill" [style.width.%]="progress()"></div></div>
+      <span class="ratio">{{ doneCount() }} / {{ total() }} analysées</span>
+    </div>
+  </div>
+
+  <p class="run-note">
+    Réponds avec tes mots, puis lance l'analyse. Elle tourne en arrière-plan : passe à la question
+    suivante sans attendre. Tu demanderas une meilleure réponse seulement si tu le souhaites.
+  </p>
+
+  @if (globalError()) {
+    <div class="banner error">{{ globalError() }}</div>
+  }
+
+  <!-- ===================== Une carte par question ===================== -->
+  @for (q of questions(); track q.index) {
+    @if (evalCell(q.index); as ev) {
+      <article class="card">
+        <div class="card-top">
+          <span class="q-index">{{ q.index }}</span>
+          <div class="q-meta">
+            <span class="cat">{{ categoryLabel(q.category) }}</span>
+            @if (q.focus) { <span class="focus">{{ q.focus }}</span> }
+          </div>
+        </div>
+
+        <h4 class="question">{{ q.question }}</h4>
+
+        @if (q.expected_points.length) {
+          <details class="points">
+            <summary>Points attendus</summary>
+            <ul>
+              @for (p of q.expected_points; track p) { <li>{{ p }}</li> }
+            </ul>
+          </details>
+        }
+
+        <textarea
+          rows="4"
+          [id]="'answer-' + q.index"
+          maxlength="4000"
+          [attr.aria-label]="'Réponse à la question ' + q.index + ' : ' + q.question"
+          placeholder="Écris ta réponse ici… (situation, action, résultat pour une question comportementale)"
+          [ngModel]="answerText(q.index)"
+          (ngModelChange)="setAnswer(q.index, $event)"
+          [name]="'answer-' + q.index"
+          [disabled]="ev.state === 'queued' || ev.state === 'running'"
+        ></textarea>
+
+        <div class="card-actions">
+          @if (ev.state === 'idle' || ev.state === 'error') {
+            <button class="btn-main sm" (click)="evaluate(q.index)" [disabled]="!canEvaluate(q.index)">
+              {{ ev.state === 'error' ? 'Relancer l\'analyse' : 'Analyser ma réponse' }}
+            </button>
+          } @else if (ev.state === 'queued' || ev.state === 'running') {
+            <span class="pending" [class.queued]="ev.state === 'queued'" [attr.data-state]="ev.state">
+              <span class="dots"><i></i><i></i><i></i></span>
+              {{ ev.state === 'queued' ? 'En attente — une analyse est déjà en cours' : 'Analyse en arrière-plan…' }}
+            </span>
+          }
+        </div>
+
+        @if (shortAnswerHint(q.index); as hint) {
+          <p class="answer-hint">{{ hint }}</p>
+        }
+
+        @if (ev.state === 'error') {
+          <p class="inline-error">{{ ev.error }}</p>
+        }
+
+        <!-- ===== Évaluation terminée ===== -->
+        @if (ev.state === 'done' && ev.result; as r) {
+          <div class="eval">
+            <div class="eval-head">
+              <span class="score" [class]="scoreTone(r.score)">{{ formatScore(r.score) }}</span>
+              <div class="eval-verdict">
+                <strong>{{ r.verdict || 'Analyse terminée' }}</strong>
+                <span class="tag ok">Terminé</span>
+                @if (r.degraded) { <span class="tag warn">Note calculée sans IA (repli)</span> }
+                @else if (r.rag_used) { <span class="tag">Adossé à {{ r.rag_sources.length }} document(s)</span> }
+              </div>
+            </div>
+
+            <ul class="criteria">
+              @if (r.criteria.relevance !== null) { <li>Conformité à la question <b>{{ formatScore(r.criteria.relevance) }}</b></li> }
+              @if (r.criteria.clarity !== null) { <li>Clarté <b>{{ formatScore(r.criteria.clarity) }}</b></li> }
+              @if (r.criteria.structure !== null) { <li>Structure <b>{{ formatScore(r.criteria.structure) }}</b></li> }
+              @if (r.criteria.technical_accuracy !== null) { <li>Justesse technique <b>{{ formatScore(r.criteria.technical_accuracy) }}</b></li> }
+            </ul>
+
+            @if (r.strengths.length || r.weaknesses.length) {
+              <div class="sw">
+                @if (r.strengths.length) {
+                  <div class="col good">
+                    <strong>Points forts</strong>
+                    <ul>@for (s of r.strengths; track s) { <li>{{ s }}</li> }</ul>
+                  </div>
+                }
+                @if (r.weaknesses.length) {
+                  <div class="col bad">
+                    <strong>À travailler</strong>
+                    <ul>@for (w of r.weaknesses; track w) { <li>{{ w }}</li> }</ul>
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- ===== Réponse améliorée, sur demande uniquement ===== -->
+            @if (improveCell(q.index); as im) {
+              <div class="improve-zone">
+                @if (im.state === 'idle' || im.state === 'error') {
+                  <button class="btn-soft sm" (click)="improve(q.index)" [disabled]="!canImprove(q.index)">
+                    Proposer une meilleure réponse
+                  </button>
+                  @if (im.state === 'error') { <p class="inline-error">{{ im.error }}</p> }
+                } @else if (im.state === 'queued' || im.state === 'running') {
+                  <span class="pending" [class.queued]="im.state === 'queued'" [attr.data-state]="im.state">
+                    <span class="dots"><i></i><i></i><i></i></span>
+                    {{ im.state === 'queued' ? 'En attente — une analyse est déjà en cours' : 'Rédaction en cours…' }}
+                  </span>
+                } @else if (im.state === 'done' && im.result; as res) {
+                  <div class="improved">
+                    <div class="improved-head">
+                      <strong>Réponse améliorée</strong>
+                      <button class="link" (click)="improve(q.index)">En régénérer une</button>
+                    </div>
+                    @if (res.star) {
+                      <div class="star">
+                        @if (res.star!.situation) { <div><b>Situation</b><span>{{ res.star!.situation }}</span></div> }
+                        @if (res.star!.task) { <div><b>Consigne</b><span>{{ res.star!.task }}</span></div> }
+                        @if (res.star!.action) { <div><b>Action</b><span>{{ res.star!.action }}</span></div> }
+                        @if (res.star!.result) { <div><b>Résultat</b><span>{{ res.star!.result }}</span></div> }
+                      </div>
+                    }
+                    <p class="improved-text">{{ res.improved_answer }}</p>
+                    @if (res.tips.length) {
+                      <ul class="tips">@for (t of res.tips; track t) { <li>{{ t }}</li> }</ul>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </article>
+    }
+  }
+
+  <!-- ===================== Synthèse ===================== -->
+  @if (allDone() && !synthesis()) {
+    <div class="cta">
+      <button class="btn-main" (click)="loadSynthesis()" [disabled]="synthesisLoading()">
+        @if (synthesisLoading()) { <span class="dots"><i></i><i></i><i></i></span> Préparation… }
+        @else { Voir la synthèse de l'entretien }
+      </button>
+    </div>
+  }
+
+  @if (synthesis(); as s) {
+    <section class="synthesis">
+      <h3>Synthèse — {{ s.job_title }}</h3>
+      <div class="syn-score" [class]="scoreTone(s.average_score)">{{ formatScore(s.average_score) }}</div>
+      <p class="syn-sub">
+        {{ s.answered }} réponse(s) analysée(s) sur {{ s.n_questions }}.
+        @if (s.best_index) { <span class="pill good">Meilleure : question {{ s.best_index }}</span> }
+        @if (s.weakest_index) { <span class="pill bad">À revoir : question {{ s.weakest_index }}</span> }
+      </p>
+      @if (s.advice.length) {
+        <ul class="advice">
+          @for (a of s.advice; track a) { <li>{{ a }}</li> }
+        </ul>
+      }
+      <div class="syn-actions">
+        <button class="btn-main" (click)="dismissed.emit()">Terminer</button>
+      </div>
+    </section>
+  }
+
+  @if (!synthesis()) {
+    <div class="run-foot">
+      <button class="btn-ghost" (click)="dismissed.emit()">Quitter l'entretien</button>
+    </div>
+  }
+</div>

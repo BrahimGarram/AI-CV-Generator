@@ -1,0 +1,85 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Annexe D --- Contributions et fichiers}
+\label{sec:contrib}
+
+Le tableau ci-dessous est une \textbf{grille à compléter} : la colonne
+\texttt{commits} reste volontairement vide. Le dépôt de travail dans lequel ce
+module a été écrit n'a pas encore d'histoire git (l'initialisation et le branchement
+sur le dépôt d'équipe sont planifiés après la revue), et aucune référence de commit
+n'a été inventée. Les hashes, dates et noms de branche sont à relever avec, par
+exemple :
+
+\begin{lstlisting}[style=adamshell]
+git log --oneline --author=Adam -- interview_adam frontend/src/app/interview-adam
+git log --format='%h %ad %s' --date=short -- interview_adam/service.py
+\end{lstlisting}
+
+Les fichiers et les lignes sont, eux, mesurés sur l'état actuel du dépôt
+(\texttt{wc -l}, hors \texttt{\_\_pycache\_\_}).
+
+\begin{small}
+\setlength{\tabcolsep}{5pt}
+\begin{longtable}{@{}>{\cellflush}p{3.4cm}
+                  >{\cellflush}p{7.2cm}
+                  >{r}p{0.9cm}
+                  >{\cellflush}p{2.9cm}@{}}
+\caption{Tâches du module, fichiers concernés, lignes mesurées et commits à
+compléter depuis l'histoire git.}\label{tab:contrib}\\
+\toprule
+\textbf{Tâche} & \textbf{Fichiers} & \textbf{Lignes} & \textbf{Commits} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Tâche} & \textbf{Fichiers} & \textbf{Lignes} & \textbf{Commits} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Configuration, client Mistral, transport & \file{config\_adam.py}, \file{llm\_adam.py}, \file{\_\_init\_\_.py} & 536 & \emph{à compléter} \\
+Contrats d'entrée/sortie et validation & \file{schemas\_adam.py} & 425 & \emph{à compléter} \\
+Orchestration d'une séance & \file{service.py}, \file{fallbacks.py} & 702 & \emph{à compléter} \\
+Routeur FastAPI & \file{router.py} & 176 & \emph{à compléter} \\
+Persistance & \file{db\_adam.py} & 242 & \emph{à compléter} \\
+Prompt engineering & \file{prompts/\brk{}base\_adam.py}, \file{prompts/\brk{}adam\_questions.py}, \linebreak[0] \file{prompts/\brk{}adam\_evaluate.py}, \linebreak[0] \file{prompts/\brk{}adam\_improve.py}, \linebreak[0] \file{prompts/\brk{}repair.py}, \linebreak[0] \file{prompts/\brk\_\_init\_\_.py} & 489 & \emph{à compléter} \\
+RAG (chunking, plongeurs, index, récupération, CLI) & \file{rag/\brk{}chunking.py}, \file{rag/\brk{}embeddings.py}, \linebreak[0] \file{rag/\brk{}store.py}, \file{rag/\brk{}retriever.py}, \linebreak[0] \file{rag/\brk{}ingest.py}, \file{rag/\brk{}search.py}, \linebreak[0] \file{rag/\brk\_\_init\_\_.py} & 1\,036 & \emph{à compléter} \\
+Base documentaire & \file{knowledge/\brk} (6 fichiers : \texttt{web-dev}, \texttt{data-ai}, \texttt{devops}, \texttt{hr-behavioral}, \texttt{star-method}, \texttt{rubrics}) & 1\,150 & \emph{à compléter} \\
+Confidentialité & \file{privacy.py} & 186 & \emph{à compléter} \\
+Neutralisation des injections & \file{security.py} & 60 & \emph{à compléter} \\
+Greffon vers le Module~1 (lecture seule) & \file{cv\_bridge.py} & 99 & \emph{à compléter} \\
+Tests & \file{tests/\brk} (9 fichiers, dont \texttt{test\_rag.py} 595 et \texttt{test\_service.py} 489) & 2\,368 & \emph{à compléter} \\
+Dépendances du module & \file{requirements\_interview\_adam.txt} & 17 & \emph{à compléter} \\
+Interface Angular & \file{frontend/\brk{}src/\brk{}app/\brk{}interview-\brk{}adam/\brk} (4 pages/composants \texttt{Adam*}, \file{interview-\brk{}adam.api.ts}, \file{models.ts}, \file{labels.ts} + 4 feuilles SCSS) & 2\,751 & \emph{à compléter} \\
+Documentation & \file{interview\_adam/\brk{}docs/\brk} (ce rapport ; les fiches \texttt{architecture.md}, \texttt{prompts.md}, \texttt{rag.md}, \texttt{tests\_and\_results.md} restent à produire) & --- & \emph{à compléter} \\
+\midrule
+\multicolumn{2}{@{}>{\raggedleft\arraybackslash}p{10.6cm}}{\textbf{Backend de
+production (hors tests, base documentaire et dépendances)}} & \textbf{3\,951} & \\
+\bottomrule
+\end{longtable}
+\end{small}
+
+\subsection{Fichiers de l'hôte touchés}
+
+Trois fichiers seulement, et pour l'essentiel deux lignes chacun --- la liste est
+donnée pour que la relecture de l'équipe soit immédiate.
+
+\begin{small}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}>{\cellflush}p{4.6cm}
+                 >{\cellflush}p{6.4cm}
+                 >{\cellflush}p{3.2cm}@{}}
+\toprule
+\textbf{Fichier} & \textbf{Modification} & \textbf{Commits} \\
+\midrule
+\file{app/\brk{}api.py} & import du routeur du module et \texttt{include\_router} & \emph{à compléter} \\
+\file{frontend/\brk{}src/\brk{}app/\brk{}app.routes.ts} & route paresseuse vers la page d'entretien & \emph{à compléter} \\
+\file{frontend/\brk{}src/\brk{}app/\brk{}workspace/\brk{}workspace.html} & lien «~Simuler un entretien~» dans la barre de navigation & \emph{à compléter} \\
+\file{.env.example} & bloc de variables du module, valeurs de démonstration uniquement & \emph{à compléter} \\
+\file{.gitignore} & \file{data/\brk}, \file{.venv/\brk}, \file{output/\brk}, caches & \emph{à compléter} \\
+\file{README.md} & section «~Interview Simulator Module (by Adam)~» (restante) & \emph{à compléter} \\
+\bottomrule
+\end{tabular}
+\end{small}
+
+Aucun fichier du Module~1 n'a été renommé, reformaté ou enrichi d'une mention
+d'auteur ; \file{llm.py}, \file{db.py}, \file{auth.py}, \file{guards.py} et
+\file{generator.py} sont importés ou imités, jamais modifiés.

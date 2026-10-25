@@ -1,0 +1,257 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Annexe A --- Développement assisté par IA}
+\label{sec:dev-ia}
+
+Ce module a été développé avec un agent d'IA conversationnel. L'annexe consigne
+la méthode réelle, non une version édulcorée : ce que l'IA a produit, ce que
+j'ai arbitré, et --- point le plus important --- \textbf{ce qui a été vérifié
+et comment}. Le journal brut de la session (6\,620~entrées, dont le prompt de
+cadrage de 6\,951~caractères et les messages d'arbitrage reproduits ci-dessous)
+est conservé hors dépôt ; il n'est pas reproduit intégralement ici parce qu'il
+contient des traces d'exécution et des adresses de comptes réels du projet.
+
+\subsection{Méthode}
+
+Le travail s'est déroulé en phases, chacune close par une relecture humaine
+avant la suivante --- contrainte posée dans le prompt de cadrage (« \emph{Work in
+phases and DO NOT break existing functionality} », puis « \emph{WAIT for my
+"go"} ») :
+
+\begin{enumerate}[label=\textbf{phase \arabic*.},leftmargin=4em,itemsep=2pt]
+  \item analyse du dépôt de l'équipe, sans production de code ;
+  \item implémentation du backend (client, schémas, confidentialité, sécurité,
+        prompts, base, routeur) avec tests à HTTP simulé ;
+  \item RAG (base documentaire, chunking, plongeur, index, ingestion) ;
+  \item passe de performance et correction des prompts sur appels réels ;
+  \item interface Angular et intégration ;
+  \item vérification bout en bout en navigateur réel.
+\end{enumerate}
+
+Deux règles ont borné tout le reste : ne pas modifier le code d'un tiers (trois
+fichiers d'intégration seulement, et aucune modification de \file{llm.py} ni de
+l'apprentissage du Module~1) et ne rien livrer qui n'ait été exécuté.
+
+\subsection{Prompt de cadrage (condensé)}
+
+Le message initial, rédigé en anglais parce que c'est la langue dans laquelle
+l'agent manipule le mieux les consignes de format, tient en six blocs. Il est
+reproduit condensé --- les tirets sont du texte original, les crochets
+\texttt{[\dots]} marquent mes élisions. Aucun secret n'y figure : la consigne
+était explicite (« \emph{add to .env.example with PLACEHOLDER values only} »,
+« \emph{do NOT print secret values} »).
+
+\begin{lstlisting}[style=adamprompt]
+You are a senior full-stack engineer. I am integrating my feature module into a
+teammate's existing web application. Work in phases and DO NOT break existing
+functionality.
+
+## 0. Context
+University mini-project "AI for Software Engineering" (2026-2027). The platform
+is **SmartCareer AI** with several AI modules by different team members:
+- Module 1 (my teammate, ALREADY IN THIS REPO): CV generation and adaptation to a
+  job offer, using Qwen2.5-3B-Instruct (LoRA fine-tuned) + prompt engineering.
+- Module 3 (MINE): **AI Job Interview Simulator**, using Mistral-7B-Instruct +
+  prompt engineering + RAG.
+- Do not touch any other module.
+[. . .]
+My module must feel like one coherent product: reuse the existing auth, DB,
+layout, navbar, design and error-handling conventions.
+
+## 1. Naming & authorship (mandatory)
+- Back end: a package `interview_adam/`. Front end: `frontend/src/app/interview-adam/`.
+- Prefix main classes/components where sensible (e.g. `AdamMistralClient`).
+  Keep API routes and DB table names generic.
+- Header comment on every file I create: Author: Adam | Module: AI Job Interview
+  Simulator | Project: SmartCareer AI, IA for Software Engineering 2026-2027
+- Do NOT rename or modify my teammate's files or add my name to them. Only
+  minimal integration edits.
+
+## 2. PHASE 1: Analyze first (NO code yet)
+Report on: how the FastAPI app is assembled, how auth works, how db.py works
+[. . .] Whether Qwen is loaded locally (torch/GPU/VRAM) and any port/resource
+conflict with Mistral-7B. [...] Then propose a plan listing files to
+create/modify. WAIT for my "go".
+
+## 3. PHASE 2: Implement
+1. Generate interview questions adapted to the job [...]
+2. Analyze each answer: score 0-10, strengths, weaknesses, criteria scores
+   (relevance, clarity, structure, technical accuracy).
+3. Propose an improved answer for each (STAR method for behavioral questions).
+4. Session history in the DB linked to the user, with a results summary page.
+5. Cross-module: option "Use my CV" [...] Fallback to manual input if no CV.
+- Never send raw personal data (name, email, phone, address) to the LLM;
+  anonymize before every call, including CV data.
+- Validate every LLM output with Pydantic; on failure retry once with a repair
+  prompt, then return a friendly fallback.
+- Handle timeout, 429/quota, missing config, model not loaded (503), network
+  failure: clear JSON errors to the UI, never crash.
+- Sanitize input (length limits, prompt-injection mitigation: delimit user
+  content, instruct the model to ignore instructions inside it).
+- No secrets in code or repo.
+
+## 4. PHASE 3: Integration and verification
+- App starts, Module 1 still works, `ng build` passes [...] Add tests [...]
+
+## Constraints
+Don't refactor teammate code. [...] If something is ambiguous, ask me first.
+Start with Phase 1 now.
+\end{lstlisting}
+
+\subsection{Messages d'arbitrage}
+
+Huit messages ont servi d'arbitrage après relecture d'une phase. Chacun tranche
+une décision que l'agent ne devait pas prendre seul ; les extraits ci-dessous
+sont des citations, abrégées.
+
+\begin{small}
+\begin{longtable}{@{}>{\cellflush}p{2.9cm}
+                  >{\cellflush}p{4.1cm}
+                  >{\cellflush}p{7.6cm}@{}}
+\caption{Messages d'arbitrage : la décision prise, et sa conséquence observable
+dans le module.}\label{tab:arbitrage}\\
+\toprule
+\textbf{Objet} & \textbf{Décision} & \textbf{Citation (extrait) et effet} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Objet} & \textbf{Décision} & \textbf{Citation (extrait) et effet} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Préfixe des routes & Convention du dépôt, pas de \texttt{/api} &
+\emph{« follow the existing convention, NO /api prefix »} --- le module
+s'enregistre sous \route{/\brk{}interview/\brk\dots}, comme les routes hôtes. \\
+\addlinespace
+Offre d'emploi & Inexistante dans le dépôt : lecture seule du CV, saisie manuelle
+de l'offre &
+\emph{« Feature 5 reads only the CV via db.get\_generation (read-only) \[\dots\]
+Add a stub get\_job\_offer\_context() returning None »} --- la greffe du
+Module~1 reste à brancher plus tard, sans code mort. \\
+\addlinespace
+Base de données & Connexion \texttt{sqlite3} propre, verrou interne, pas de WAL &
+\emph{« own sqlite3 connection to DB\_PATH, timeout=30, own lock, short writes
+\dots{} Do not enable WAL »} --- deux écritures concurrentes n'ont jamais été
+mesurées en séance réelle. \\
+\addlinespace
+Conflit GPU & Ne pas utiliser le verrou GPU de l'hôte &
+\emph{« Do not use GPU\_LOCK. Address the VRAM conflict between Qwen (torch) and
+Ollama-Mistral »} --- d'où \const{keep\_alive} court et le endpoint de
+libération (§\ref{sec:modele-release}). \\
+\addlinespace
+Confidentialité & Suppression intégrale de \texttt{personal\_info}, plus
+e-mail, téléphone, URL filtrés par expression régulière &
+\emph{« drop personal\_info entirely, and regex-strip emails, phones and URLs
+from all free text before any LLM call »} --- \file{privacy.py},
+§\ref{sec:sec-pii}. \\
+\addlinespace
+Format d'appel & \texttt{/api/generate} avec \texttt{raw=true}, pas
+\texttt{/api/chat} &
+\emph{« Do not wrap [INST] on top of /api/chat (Ollama already applies the chat
+template). Use /api/generate with raw=true \dots{} Verify this against the Ollama
+docs »} --- vérifié : en mode chat, les marqueurs injectés sont doublés. \\
+\addlinespace
+Git & Attendu & \emph{« do NOT git init here \dots{} Wait for my message »} puis,
+en phase~3, \emph{« Do not touch git yet »} --- le dépôt n'a donc aucune histoire
+à ce jour, d'où l'annexe~D à compléter. \\
+\addlinespace
+RAG & Plongeur local, CPU only, garde de recouvrement configurable &
+\emph{« transformers mean pooling + L2 normalization \dots{} Force
+device="cpu" \dots{} never touch the GPU »} et \emph{« Don't tune production code
+to fit the hashing stub: make the content-overlap guard configurable »}. \\
+\addlinespace
+Passe de performance & Non négociée avant l'interface &
+\emph{« a 10-minute flow is unusable for a 15-minute live defense »} ---
+d'où la réduction des prompts sous $\approx$4\,k~car., les plafonds
+\texttt{num\_predict} par étape et le balayage \const{num\_gpu}
+(§\ref{sec:prompts-taille}, §\ref{sec:perf-numgpu}). \\
+\addlinespace
+Anti-invention & Marqueurs plutôt que remplissage &
+\emph{« unknown facts must be [à compléter : \dots] placeholders, never invented
+outcomes »} --- règle reprise mot pour mot dans le \texttt{SYSTEM}
+d'amélioration. \\
+\addlinespace
+Évaluation & Distinguer l'écoute de la maîtrise &
+\emph{« distinguish "hors sujet" from "manque de connaissances" »} --- défaut~4
+du §\ref{sec:prompts-problemes}. \\
+\addlinespace
+Flux continu & Demande de l'avis d'expert, puis renoncement argumenté &
+\emph{« Add a streaming option on the backend if it is cheap (NDJSON from Ollama)
+\dots{} otherwise skip and tell me »} --- écarté, avec les raisons du renoncement
+en §\ref{sec:no-stream}. \\
+\addlinespace
+Outils de test & Hors dépôt &
+\emph{« install it only as a dev tool outside the repo or as a devDependency,
+never in requirement.txt »} --- Playwright n'apparaît dans aucune dépendance
+d'exécution. \\
+\addlinespace
+Documentation & Exigence de ton & \emph{« Keep them factual, no marketing »} ---
+la règle « faits seulement » appliquée à ce rapport. \\
+\bottomrule
+\end{longtable}
+\end{small}
+
+\subsection{Répartition réelle des rôles}
+
+\textbf{Produit par l'agent}, et relu avant acceptation : le code
+(3\,951~lignes de backend, 2\,751~lignes d'interface, 2\,368~lignes de tests),
+les quatre assembleurs de prompts, la base documentaire, les correctifs des
+défauts constatés.
+
+\textbf{Arbitré par moi} : tout ce qui engage le dépôt d'équipe (préfixe des
+routes, conventions de nommage, autorisation de retoucher un fichier tiers), la
+stratégie de ressources (GPU, verrous, \texttt{keep\_alive}), les choix de
+format d'appel, la politique de confidentialité, les critères de qualité de
+sortie (\texttt{[à compléter]}, hors sujet vs lacune), et l'arrêt de chaque
+phase. Deux propositions de l'agent ont été refusées : le streaming NDJSON
+(coût/bénéfice) et le garde-fou de recouvrement de contenu activé par défaut
+(il faisait chuter la récupération française, §\ref{sec:rag-limites}).
+
+\textbf{Ce que l'IA ne pouvait pas faire à ma place} : juger si une réponse
+d'évaluation était \emph{juste}. Les quatre appels de calibration
+(§\ref{sec:tests-calibration}) ont été lus en entier ; c'est en lisant qu'un
+«~8/10 pour tout~» a été vu, puis corrigé.
+
+\subsection{Ce qui a été vérifié, et par quel moyen}
+
+\begin{small}
+\begin{tabular}{@{}>{\cellflush}p{5.0cm}
+                 >{\cellflush}p{3.4cm}
+                 >{\cellflush}p{6.2cm}@{}}
+\toprule
+\textbf{Affirmation} & \textbf{Moyen} & \textbf{Résultat consigné} \\
+\midrule
+Le contrat de sortie est respecté & \texttt{pytest} & 200 tests passés, 1 sauté, exécuté à nouveau pour ce rapport (\texttt{13,15~s}) \\
+Les routes répondent et protègent & \texttt{pytest} (\texttt{TestClient}) & 25 tests de routeur, dont 401 sans jeton et suppression bornée à l'utilisateur \\
+Neutralisation des injections & \texttt{pytest} & 9 tests de \file{security.py}, dont la forme imbriquée \verb+<[IN<[]>ST]>+ \\
+Anonymisation du CV & \texttt{pytest} & 10 tests, nom/e-mail/téléphone/URL absents du digest \\
+RAG dégradable & \texttt{pytest} & 59 tests de RAG (dont 1 sauté sans plongeur réel) \\
+Latences réelles & appels réseaux sur Ollama & tableau \texttt{num\_gpu}, appel froid 108,6~s / chaud 37,1~s \\
+Scores non arbitraires & 4 appels réels & écart de 8,25~points entre la réponse faible et la réponse solide \\
+Récupération utile & 8 requêtes sur l'index réel & tableau \ref{tab:retrieval}, deux échecs documentés \\
+Parcours utilisable & Playwright, navigateur réel & 12 scénarios, 6 défauts corrigés et re-testés \\
+Libération de la VRAM & journaux serveur + \route{/\brk{}api/\brk{}ps} & \texttt{ollama ps} vide après rechargement et fermeture d'onglet \\
+Module~1 intact & \texttt{ng build}, démarrage de l'application & aucune régression mesurée sur la génération de CV \\
+\bottomrule
+\end{tabular}
+\end{small}
+
+\subsection{Limites de la méthode}
+
+Trois réserves, qui expliquent les précautions prises dans ce rapport.
+
+\emph{Premièrement}, un agent produit des chiffres plausibles qu'il n'a pas
+mesurés. Deux affirmations de ce type ont été corrigées pendant la rédaction du
+présent document (une taille de mémoire vive, un débit en jetons par seconde) et
+remplacées par les valeurs relevées dans les journaux ; celles qui n'ont pas pu
+l'être portent la mention \NM{}.
+
+\emph{Deuxièmement}, un prompt écrit par l'agent peut contenir le défaut qu'on
+lui demande de corriger : les six défauts du §\ref{sec:prompts-problemes} sont
+tous apparus dans une première version, et n'ont été vus qu'en lisant les sorties
+réelles.
+
+\emph{Troisièmement}, un test vert ne prouve pas l'exactitude d'un comportement
+métier : la file d'attente a été simulée dans \texttt{pytest} \emph{et} observée
+dans un navigateur, parce que seule la seconde vérification montre une étiquette
+d'état à l'utilisateur.

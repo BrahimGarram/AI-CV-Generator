@@ -1,0 +1,130 @@
+<!-- Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI, IA for Software Engineering 2026-2027 -->
+<div class="setup">
+  <header class="setup-head">
+    <h3>Prépare ton entretien</h3>
+    <p>Décris le poste visé. L'IA génère des questions sur mesure, les note, puis te propose des réponses améliorées.</p>
+  </header>
+
+  <form class="setup-form" (submit)="$event.preventDefault(); submit()">
+    <label class="field">
+      <span>Poste visé <b class="req">*</b></span>
+      <input
+        type="text"
+        maxlength="200"
+        placeholder="Ex. Développeur Full-Stack Java / Angular"
+        [ngModel]="jobTitle()"
+        (ngModelChange)="jobTitle.set($event)"
+        name="jobTitle"
+        (keydown.enter)="$event.preventDefault()"
+        [disabled]="submitting()"
+      />
+    </label>
+
+    <div class="row">
+      <label class="field grow">
+        <span>Entreprise <em>(facultatif)</em></span>
+        <input
+          type="text"
+          maxlength="200"
+          placeholder="Ex. Elyadata"
+          [ngModel]="company()"
+          (ngModelChange)="company.set($event)"
+          name="company"
+          [disabled]="submitting()"
+        />
+      </label>
+      <label class="field">
+        <span>Niveau</span>
+        <select [ngModel]="seniority()" (ngModelChange)="seniority.set($event)" name="seniority" [disabled]="submitting()">
+          @for (o of seniorities; track o.value) { <option [value]="o.value">{{ o.label }}</option> }
+        </select>
+      </label>
+    </div>
+
+    <label class="field">
+      <span>Description de l'offre <em>(facultatif, mais très utile)</em></span>
+      <textarea
+        rows="4"
+        maxlength="2400"
+        placeholder="Colle ici les missions et compétences demandées. Tu peux aussi écrire avec tes mots."
+        [ngModel]="jobDescription()"
+        (ngModelChange)="jobDescription.set($event)"
+        name="jobDescription"
+        [disabled]="submitting()"
+      ></textarea>
+    </label>
+
+    <div class="row">
+      <label class="field grow">
+        <span>Type de questions</span>
+        <select [ngModel]="questionType()" (ngModelChange)="questionType.set($event)" name="questionType" [disabled]="submitting()">
+          @for (o of types; track o.value) { <option [value]="o.value">{{ o.label }}</option> }
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Nombre de questions</span>
+        <input
+          type="number"
+          [min]="minQ"
+          [max]="maxQ"
+          [ngModel]="nQuestions()"
+          (ngModelChange)="setQuestionCount($event)"
+          name="nQuestions"
+          [disabled]="submitting()"
+        />
+      </label>
+
+      <label class="field">
+        <span>Langue</span>
+        <select [ngModel]="language()" (ngModelChange)="language.set($event)" name="language" [disabled]="submitting()">
+          @for (o of languages; track o.value) { <option [value]="o.value">{{ o.label }}</option> }
+        </select>
+      </label>
+    </div>
+
+    <!-- Personnalisation à partir d'un CV déjà généré (Module 1) -->
+    <div class="cv-option">
+      <label class="check">
+        <input
+          type="checkbox"
+          [ngModel]="useCv()"
+          (ngModelChange)="toggleCv($event)"
+          name="useCv"
+          [disabled]="submitting() || cvLoading()"
+        />
+        <span>Appuyer les questions sur l'un de mes CV</span>
+      </label>
+
+      @if (useCv()) {
+        @if (cvList().length === 0) {
+          <p class="cv-empty">Tu n'as pas encore généré de CV. Créer d'abord un CV dans ton espace pour activer cette option.</p>
+        } @else {
+          <select class="cv-select" [ngModel]="cvId()" (ngModelChange)="cvId.set($event)" name="cvId" [disabled]="submitting()">
+            <option [ngValue]="null">Choisir un CV…</option>
+            @for (g of cvList(); track g.id) {
+              <option [value]="g.id">{{ g.title }}</option>
+            }
+          </select>
+        }
+      }
+    </div>
+
+    @if (error()) {
+      <p class="form-error">{{ error() }}</p>
+    }
+
+    <div class="setup-actions">
+      <button class="btn-main" type="submit" [disabled]="!canSubmit()">
+        @if (submitting()) {
+          <span class="dots"><i></i><i></i><i></i></span>
+          Génération des questions…
+        } @else {
+          Générer les questions
+        }
+      </button>
+      <button class="btn-ghost" type="button" (click)="cancel.emit()" [disabled]="submitting()">Annuler</button>
+    </div>
+    <p class="hint">Tout reste dans ton compte. Le modèle ne reçoit jamais ton nom, ton e-mail ni ton téléphone.</p>
+  </form>
+</div>

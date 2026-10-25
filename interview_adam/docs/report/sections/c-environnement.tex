@@ -1,0 +1,163 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Annexe C --- Variables d'environnement et exécution}
+\label{sec:env}
+
+\subsection{Variables}
+
+Le module ne lit la configuration que par l'intermédiaire de
+\file{config\_adam.py}, qui applique une valeur par défaut à chaque variable :
+\textbf{aucune} variable n'est obligatoire pour démarrer, à part le choix
+contraire. Les valeurs par défaut ci-dessous sont celles du dépôt, relevées dans
+\file{config\_adam.py} et \file{.env.example} --- pas celles d'un poste de
+développement.
+
+\begin{small}
+\setlength{\tabcolsep}{5pt}
+\begin{longtable}{@{}>{\cellflush}p{4.5cm}
+                  >{\cellflush}p{3.2cm}
+                  >{\cellflush}p{6.7cm}@{}}
+\caption{Variables d'environnement du module : nom lu, défaut, effet mesuré ou
+documenté.}\label{tab:env}\\
+\toprule
+\textbf{Variable} & \textbf{Défaut} & \textbf{Effet} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Variable} & \textbf{Défaut} & \textbf{Effet} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\multicolumn{3}{@{}l}{\textbf{Modèle et transport}}\\
+\texttt{MISTRAL\_BASE\_URL} & \texttt{http://\allowbreak localhost:11434} & adresse d'Ollama ; \texttt{/v1} n'est pas utilisé, les URL sont construitées sur \texttt{/api/generate}, \texttt{/api/tags}, \texttt{/api/ps} \\
+\texttt{MISTRAL\_MODEL} & \texttt{mistral:7b-\brk{}instruct-\brk{}v0.2-\brk{}q4\_K\_M} & nom passé tel quel à Ollama ; doit correspondre à un modèle réellement \texttt{pull} \\
+\texttt{MISTRAL\_API\_KEY} & \emph{(vide)} & en-tête \texttt{Authorization} ajouté seulement si non vide ; inutile en local \\
+\texttt{ADAM\_TIMEOUT\_READ} & \texttt{600} & plafond de génération d'un appel (\texttt{stream=false}) ; \texttt{ADAM\_MISTRAL\_TIMEOUT\_READ} reste accepté comme alias \\
+\texttt{ADAM\_MISTRAL\_TIMEOUT\_CONNECT} & \texttt{10} & délai de prise de connexion \\
+\texttt{ADAM\_MISTRAL\_RETRIES} & \texttt{2} & tentatives supplémentaires sur 429/5xx \\
+\texttt{ADAM\_MISTRAL\_BACKOFF\_BASE} & \texttt{3} & secondes, multipliées par le numéro de tentative \\
+\texttt{ADAM\_MISTRAL\_KEEP\_ALIVE} & \texttt{5m} & rétention du modèle en mémoire par Ollama entre deux appels \\
+\texttt{ADAM\_MISTRAL\_NUM\_GPU} & \texttt{-1} & couches déléguées au GPU ; \texttt{-1}=au maximum que peut prendre Ollama. Valeur testée sur 4~Go : \texttt{0}, \texttt{10}, \texttt{20}, \texttt{-1} (§\ref{sec:perf-numgpu}) \\
+\texttt{ADAM\_MISTRAL\_NUM\_CTX} & \texttt{8192} & fenêtre du contexte ; c'est le poste qui consomme le plus de VRAM, pas les poids \\
+\multicolumn{3}{@{}l}{\textbf{Coût de génération et concurrence}}\\
+\texttt{ADAM\_MAX\_NEW\_TOKENS} & \texttt{1400} & plafond global de sortie \\
+\texttt{ADAM\_QUESTIONS\_BASE\_TOKENS} & \texttt{120} & partie fixe du prompt de questions \\
+\texttt{ADAM\_QUESTIONS\_TOKENS\_PER\_QUESTION} & \texttt{170} & budget de sortie par question demandée \\
+\texttt{ADAM\_EVALUATE\_MAX\_TOKENS} & \texttt{420} & plafond de l'analyse d'une réponse \\
+\texttt{ADAM\_IMPROVE\_MAX\_TOKENS} & \texttt{520} & plafond de la réponse améliorée \\
+\texttt{ADAM\_MAX\_CONCURRENT\_LLM\_CALLS} & \texttt{1} & sémaphore : une seule génération à la fois, les analyses de fond se mettent en file \\
+\texttt{ADAM\_SEMAPHORE\_TIMEOUT} & \texttt{TIMEOUT\_READ + 60} & attente maximale de libération du sémaphore \\
+\multicolumn{3}{@{}l}{\textbf{Bornes d'entrée (coût et injection)}}\\
+\texttt{ADAM\_MAX\_JOB\_DESCRIPTION\_CHARS} & \texttt{2400} & offre saisie à la main \\
+\texttt{ADAM\_MAX\_CV\_DIGEST\_CHARS} & \texttt{1200} & digest anonymisé du CV \\
+\texttt{ADAM\_MAX\_RAG\_CONTEXT\_CHARS} & \texttt{900} & bloc documentaire injecté \\
+\texttt{ADAM\_MAX\_RAG\_CHUNK\_CHARS} & \texttt{340} & chaque fragment injecté \\
+& \emph{(constantes)} & \texttt{MAX\_JOB\_TITLE\_CHARS}=200, \texttt{MAX\_COMPANY\_CHARS}=200, \texttt{MAX\_QUESTION\_CHARS}=600, \texttt{MAX\_ANSWER\_CHARS}=4000, questions entre \texttt{MIN\_QUESTIONS}=3 et \texttt{MAX\_QUESTIONS}=15 \\
+\multicolumn{3}{@{}l}{\textbf{Confidentialité}}\\
+\texttt{ADAM\_REDACT\_ORGS} & \texttt{false} & à \texttt{true}, remplace aussi noms d'entreprises et d'écoles ; noms, e-mails, téléphones, URL et \texttt{personal\_info} sont supprimés dans les deux cas \\
+\multicolumn{3}{@{}l}{\textbf{RAG}}\\
+\texttt{ADAM\_EMBEDDING\_MODEL} & \texttt{sentence-\allowbreak transformers/\allowbreak all-\allowbreak MiniLM-\allowbreak L6-\allowbreak v2} & poids du plongeur, chargés via \texttt{transformers} sur CPU \\
+\texttt{ADAM\_RAG\_TOP\_K} & \texttt{2} & fragments injectés dans un prompt \\
+\texttt{ADAM\_RAG\_MIN\_SCORE} & \texttt{0.20} & seuil en dessous duquel rien n'est injecté ; calé sur les scores réels du tableau~\ref{tab:retrieval} \\
+\texttt{ADAM\_RAG\_CANDIDATES} & \texttt{9} & sur-échantillonnage avant reclassement par domaine \\
+\texttt{ADAM\_RAG\_REQUIRE\_OVERLAP} & \texttt{false} & impose ou non un mot commun entre requête et fragment ; à activer si un autre plongeur produit des hors-sujets non nuls \\
+\multicolumn{3}{@{}l}{\textbf{Divers}}\\
+\texttt{ADAM\_DB\_PATH} & \texttt{data/cv\_platform.db} & fichier SQLite visé ; permet un fichier jetable pendant les tests \\
+\texttt{ADAM\_RAG\_TESTS} & \emph{(non défini)} & à \texttt{1}, autorise les tests qui chargent le vrai plongeur ; sans lui, un test est sauté \\
+\end{longtable}
+\end{small}
+
+\subsection{Installation}
+
+Les commandes sont celles utilisées sur le poste de développement (Python~3.14,
+Windows). Elles supposent le dépôt de l'équipe cloné à la racine du projet.
+
+\begin{lstlisting}[style=adamshell]
+# 1. Environnement unique pour les deux modules (jamais deux versions du meme paquet)
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirement.txt
+pip install -r interview_adam\requirements_interview_adam.txt
+#    -> n'ajoute que faiss-cpu, pytest et httpx : torch, transformers, fastapi,
+#       pydantic et requests viennent deja du fichier de l'equipe
+
+# 2. Modele local
+ollama serve                       # ecoute sur 11434
+ollama pull mistral:7b-instruct-v0.2-q4_K_M
+ollama list                        # verifier la taille reellement telechargee
+
+# 3. Index documentaire (a relancer apres toute modification de knowledge/)
+python -m interview_adam.rag.ingest
+#    -> ecrit data/interview_adam/knowledge.faiss et knowledge_meta.json,
+#       affiche le nombre de fragments par domaine (72 au total)
+
+python -m interview_adam.rag.search "DevOps conteneurisation Docker pipeline"
+#    -> outil de demonstration : top-k avec scores, sans passer par le modele
+\end{lstlisting}
+
+\subsection{Démarrage}
+
+\begin{lstlisting}[style=adamshell]
+# Backend (FastAPI de la plateforme, le module s'y enregistre)
+python -m uvicorn app.api:app --port 8000
+#    -> doc interactive http://localhost:8000/docs, routes sous /interview/*
+
+# Frontend
+cd frontend
+npm install
+npm start                          # ng serve sur http://localhost:4200
+#    -> page "Simuler un entretien" dans la barre de navigation
+\end{lstlisting}
+
+Le module ne demande aucune étape de migration : les tables
+\texttt{interview\_sessions} et \texttt{interview\_qa} sont créées à la première
+utilisation (\texttt{CREATE TABLE IF NOT EXISTS}, schéma idempotent), dans le même
+fichier SQLite que la plateforme, depuis une connexion et un verrou propres.
+
+\subsection{Tests}
+
+\begin{lstlisting}[style=adamshell]
+# Suite complete, sans modele ni reseau (HTTP simule)
+python -m pytest interview_adam/tests -q
+#    -> 200 passes, 1 saute, 13,15 s sur le poste de developpement
+
+# Avec le vrai plongeur (telecharge les poids all-MiniLM-L6-v2, CPU)
+set ADAM_RAG_TESTS=1
+python -m pytest interview_adam/tests/test_rag.py -q
+#    -> le test saute devient executable ; ~10 s supplementaires
+
+# Verification en navigateur reel : scripts Playwright hors depot
+# (installes comme outil de developpement local, jamais dans requirement.txt)
+\end{lstlisting}
+
+\subsection{Ce que contient \texttt{data/}}
+
+\file{data/\brk} est ignoré par git et renferme, outre la base SQLite de la
+plateforme et l'index vectoriel du module, le secret de signature de jetons de
+l'hôte. Aucun de ces fichiers n'est versionné, cité en valeur, ni reproduit dans
+ce rapport : les journaux cités (§\ref{sec:perf-controle}) ne contiennent que des
+durées, des noms de routes et des marqueurs d'état.
+
+\subsection{Compilation de ce rapport}
+
+Deux voies, selon que l'on compile ce chapitre seul ou avec le rapport d'équipe.
+
+\begin{lstlisting}[style=adamshell]
+# (a) Chapitre autonome
+cd interview_adam/docs/report
+pdflatex main && pdflatex main        # deux passes : table des matieres et ref croisees
+
+# (b) Dans le rapport d'equipe, depuis la racine du depot
+#   dans le preambule :
+#     \newcommand{\adamroot}{interview_adam/docs/report/}
+#     \input{\adamroot report-preamble}
+#   dans le corps, a l'emplacement du chapitre :
+#     \input{\adamroot chapter-interview-adam}
+\end{lstlisting}
+
+Le préambule du chapitre ne charge chaque paquet que s'il n'est pas déjà chargé
+(\texttt{@ifpackageloaded}) et ne définit aucune colonne de tableau globale : il
+n'entre donc pas en conflit avec la mise en page de l'hôte. Il n'utilise ni
+\texttt{minted} ni shell---\texttt{escape} : \texttt{pdflatex} suffit, et le
+chapitre a été compilé ici avec \texttt{tectonic}~0.17.0, qui met en œuvre le
+même moteur.

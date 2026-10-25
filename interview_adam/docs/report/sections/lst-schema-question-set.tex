@@ -1,0 +1,38 @@
+% Rendu JSON de QUESTION-SET_SCHEMA (interview_adam/schemas_adam.py).
+\begin{lstlisting}[style=adamjson]
+{
+ "type": "object",
+ "properties": {
+  "questions": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "question": {
+      "type": "string"
+     },
+     "category": {
+      "type": "string"
+     },
+     "focus": {
+      "type": "string"
+     },
+     "expected_points": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "question",
+     "category"
+    ]
+   }
+  }
+ },
+ "required": [
+  "questions"
+ ]
+}
+\end{lstlisting}

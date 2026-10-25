@@ -1,0 +1,388 @@
+/* Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI, IA for Software Engineering 2026-2027 */
+
+:host {
+  display: block;
+}
+
+.hist {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hist-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h3 {
+    margin: 0;
+    font-size: 18px;
+  }
+}
+
+.btn-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  border-radius: 11px;
+  background: var(--gradient);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 9px 15px;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.05);
+  }
+}
+
+.banner.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+}
+
+.skeleton {
+  height: 74px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+  animation: shimmer 1.3s infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 44px 20px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+
+  p {
+    margin: 12px auto 0;
+    max-width: 380px;
+    font-size: 14px;
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.12s;
+
+  &:hover {
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+  }
+}
+
+.row-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 15px;
+
+  span {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+}
+
+.row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+
+  .dot {
+    opacity: 0.5;
+  }
+
+  .state {
+    background: var(--surface-3);
+    border-radius: 20px;
+    padding: 2px 9px;
+    color: var(--text-soft);
+
+    &.done {
+      background: var(--success-soft);
+      color: var(--success);
+    }
+  }
+}
+
+.row-score {
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 10px;
+  padding: 6px 12px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+
+  &.good {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  &.mid {
+    background: #fff4e0;
+    color: #b8791b;
+  }
+
+  &.bad {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+}
+
+.row-del {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+
+  &:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  &.confirm {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+}
+
+.link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &.danger {
+    color: var(--danger);
+    font-weight: 600;
+  }
+}
+
+.back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  border-radius: 10px;
+  padding: 7px 13px;
+  font-size: 13.5px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  h3 {
+    margin: 0;
+    font-size: 19px;
+  }
+
+  .sub {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+}
+
+.detail-score {
+  font-size: 30px;
+  font-weight: 800;
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+
+  &.good {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  &.mid {
+    background: #fff4e0;
+    color: #b8791b;
+  }
+
+  &.bad {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+}
+
+.advice {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+
+  li {
+    background: var(--surface-2);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 9px 13px;
+    font-size: 13.5px;
+    color: var(--text-soft);
+  }
+}
+
+.answers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ans {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.ans-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ans-idx {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.ans-q {
+  font-size: 14.5px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.ans-score {
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 3px 9px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+
+  &.good {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  &.mid {
+    background: #fff4e0;
+    color: #b8791b;
+  }
+
+  &.bad {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+}
+
+.ans-body {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-soft);
+  white-space: pre-wrap;
+}
+
+.ans-verdict {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ans-imp {
+  margin: 10px 0 0;
+  font-size: 13px;
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 10px 12px;
+  color: var(--text);
+
+  b {
+    color: var(--accent);
+  }
+}
+
+.ans-empty {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.loading-inline {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 8px;
+}

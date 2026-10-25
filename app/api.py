@@ -53,6 +53,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from interview_adam.router import router as interview_router  # noqa: E402
+app.include_router(interview_router)
 
 # Conversations en cours, en mémoire (l'historique des CV, lui, est en base).
 SESSIONS = {}

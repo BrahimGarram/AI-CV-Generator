@@ -1,0 +1,62 @@
+<!-- Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI, IA for Software Engineering 2026-2027 -->
+<div class="page">
+  <!-- ===================== En-tête ===================== -->
+  <header class="head">
+    <div class="head-left">
+      <a class="logo" routerLink="/app" title="Retour à l'éditeur de CV">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      </a>
+      <div>
+        <h1>Simulateur d'entretien</h1>
+        <span class="subtitle">Entraîne-toi sur de vraies questions de recrutement</span>
+      </div>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab" [class.on]="mode() === 'setup'" (click)="goSetup()">Nouvel entretien</button>
+      <button class="tab" [class.on]="mode() === 'history'" (click)="goHistory()">Mes entretiens</button>
+      <a class="tab exit" routerLink="/app">Éditeur de CV</a>
+    </nav>
+  </header>
+
+  <!-- ===================== Bandeau d'état ===================== -->
+  @if (status() === null) {
+    <div class="banner off">
+      <span class="dot"></span>
+      Le simulateur est momentanément indisponible. Vérifie que le backend tourne puis recharge.
+    </div>
+  } @else if (!status()!.llm_available) {
+    <div class="banner warn">
+      <span class="dot"></span>
+      Le modèle d'IA n'est pas joignable pour l'instant. Les réponses peuvent être plus simples ou indisponibles.
+    </div>
+  } @else if (status()!.rag_available) {
+    <div class="info">
+      Base documentaire branchée : {{ status()!.rag_chunks }} fragments
+      @if (status()!.rag_model) { · modèle {{ status()!.rag_model }} }
+    </div>
+  }
+
+  <!-- ===================== Contenu ===================== -->
+  <main class="body">
+    @switch (mode()) {
+      @case ('setup') {
+        <app-adam-interview-setup [status]="status()" (started)="startRun($event)" (cancel)="goHistory()" />
+      }
+      @case ('run') {
+        @if (result(); as r) {
+          <app-adam-interview-run
+            [questions]="r.questions"
+            [context]="r.context"
+            [sessionId]="r.session_id"
+            [ragUsed]="r.rag_used"
+            (dismissed)="leaveRun()"
+          />
+        }
+      }
+      @case ('history') {
+        <app-adam-interview-history (newInterview)="newInterview()" />
+      }
+    }
+  </main>
+</div>

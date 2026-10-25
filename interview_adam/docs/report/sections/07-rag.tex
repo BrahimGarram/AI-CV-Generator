@@ -1,0 +1,335 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Retrieval-Augmented Generation (RAG)}
+\label{sec:rag}
+
+Le RAG du module ne récupère pas des documents : il récupère des \emph{fiches de
+référence} écrites pour le projet --- barèmes, questions types, attendus par
+domaine --- afin d'ancrer le prompt sur un référentiel explicite plutôt que sur
+la seule mémoire paramétrique du modèle. Il est \textbf{toujours facultatif} :
+son absence ne bloque jamais un appel (§\ref{sec:rag-degrade}).
+
+\subsection{Pipeline complet}
+
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[font=\sffamily]
+  \node[adambox] (md)   at (0,0)    {\texttt{knowledge/*.md}\\{\scriptsize 6 fichiers, 6 domaines}};
+  \node[adambox] (chunk) at (3.2,0) {\texttt{rag/chunking.py}\\{\scriptsize 1 titre \texttt{\#\#} = 1 fragment}\\{\scriptsize 72 fragments}};
+  \node[adambox] (emb)  at (7.0,0)  {\texttt{rag/embeddings.py}\\{\scriptsize all-MiniLM-L6-v2}\\{\scriptsize moyennes + $L_2$, CPU}};
+  \node[adambox] (idx)  at (10.8,0) {\texttt{rag/store.py}\\{\scriptsize IndexFlatIP}\\{\scriptsize 384 dim., 110\,637 octets}};
+
+  \node[adambox] (q)    at (0,-3.0)   {requête\\{\scriptsize poste + offre + compétences}};
+  \node[adambox] (gl)  at (3.2,-3.0) {\texttt{expand\_query()}\\{\scriptsize glossaire FR$\to$EN, 25 termes}};
+  \node[adambox] (srch)at (7.0,-3.0) {\texttt{search(kind, requête)}\\{\scriptsize 9 candidats, $k=2$}};
+  \node[adambox] (filt)at (10.8,-3.0){filtres\\{\scriptsize seuil 0,20 puis}\\{\scriptsize priorité domain}};
+  \node[adambox] (ctx)  at (14.2,-3.0){\texttt{context()}\\{\scriptsize 340 car./fragment}\\{\scriptsize $\leq$ 900 car.}};
+
+  \node[adamsvc] (prompt) at (10.8,-5.4) {\texttt{SYSTEM}/\texttt{TÂCHE} du prompt\\{\scriptsize bloc \texttt{<references>}}};
+  \node[adamext] (ui)    at (14.2,-5.4)  {puces \texttt{rag\_sources}\\{\scriptsize « Base documentaire »}};
+
+  \draw[adamflow] (md) -- (chunk);
+  \draw[adamflow] (chunk) -- (emb);
+  \draw[adamflow] (emb) -- (idx);
+  \draw[adamflow] (q) -- (gl);
+  \draw[adamflow] (gl) -- (srch);
+    \draw[adamflow] (idx.south) |- (srch.north);
+  \draw[adamflow] (srch) -- (filt);
+  \draw[adamflow] (filt) -- (ctx);
+  \draw[adamflow] (ctx.south) |- (prompt.north);
+  \draw[adamback] (filt.south) |- (ui.north);
+  \node[lam] at (5.0,0.7) {ingestion (CLI, hors service)};
+  \node[lam] at (5.0,-2.3) {requête (à chaque appel)};
+\end{tikzpicture}}
+\caption{Pipeline RAG du module : ingestion offline, recherche à chaque appel, injection
+bornée dans le prompt et traçabilité côté interface.}
+\label{fig:rag}
+\end{figure}
+
+\subsection{Base documentaire}
+\label{sec:rag-base}
+
+Six fichiers markdown en anglais, un par domaine, sous
+\file{interview\_adam/\brk{}knowledge/\brk}, écrits pour le module (aucun contenu importé
+d'Internet --- le corpus est donc vérifiable et redistribuable) :
+\texttt{web-dev.md}, \texttt{data-ai.md}, \texttt{devops.md},
+\texttt{hr-behavioral.md}, \texttt{rubrics.md}, \texttt{star-method.md}.
+
+Le format est tenu par la documentation interne des fichiers eux-mêmes :
+front-matter \texttt{domain}, puis une section par fragment (titre de niveau
+\texttt{\#\#}), avec en ligne de tête \texttt{type} (\texttt{question} $\mid$
+\texttt{guideline} $\mid$ \texttt{rubric}), \texttt{difficulty} (\texttt{junior}
+$\mid$ \texttt{intermediate} $\mid$ \texttt{senior}) et \texttt{tags}.
+L'identifiant d'un fragment est dérivé du nom de fichier et du titre
+(\texttt{web-dev/n-plus-one-queries-and-how-to-fix-them}) : il est stable, donc
+l'ingestion est idemporente.
+
+\begin{small}
+\begin{table}[H]
+\centering
+\caption{Corpus réellement indexé (relevé dans \texttt{knowledge\_meta.json},
+index reconstruit le \texttt{2026-10-25T02:52:22Z}).}
+\label{tab:corpus}
+\begin{tabular}{@{}l r r r@{}}
+\toprule
+\textbf{Domaine} & \textbf{Fragments} & \textbf{Domaine} & \textbf{Fragments} \\
+\midrule
+\texttt{web-dev}       & 13 & \texttt{hr-behavioral} & 13 \\
+\texttt{data-ai}       & 13 & \texttt{devops}        & 13 \\
+\texttt{rubrics}       & 10 & \texttt{star-method}   & 10 \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{Total}} & \multicolumn{2}{l}{\textbf{72 fragments, 384 dimensions}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{small}
+
+Longueur des fragments, mesurée sur les 72 entrées : de 701 à 996~caractères,
+médiane 844. Le découpage est donc \emph{naturel} (une section = un fragment),
+sans fenêtre glissante ni recouvrement : à ce volume, un fragment plus long
+dégraderait le rappel plutôt que de l'améliorer, et le découpage sémantique rend
+l'attribution de domaine exacte.
+
+\subsection{Plongées}
+\label{sec:rag-embed}
+
+Modèle \texttt{sentence-transformers/all-MiniLM-L6-v2} (384~dimensions), chargé
+via \texttt{transformers} 4.57.3 --- \texttt{sentence\_transformers} n'est pas
+installé et ne le sera pas (§\ref{sec:stack-ecarts}). La recipe d'agrégation,
+dans \texttt{rag/embeddings.py}, est celle de Sentence-BERT
+\cite{reimers2019sbert} :
+
+\begin{enumerate}[label=\arabic*.,leftmargin=*,itemsep=1pt]
+  \item tokenize avec plafond \texttt{MAX\_SEQ\_LENGTH} = 512 sous-tokens ;
+  \item passe avant, en batches de 8 ;
+  \item agrégat = moyenne \emph{pondérée par le masque d'attention} sur les
+        sorties \texttt{last\_hidden\_state} (les tokens de padding ne
+        participent pas à la moyenne) ;
+  \item normalisation $L_2$ du vecteur obtenu.
+\end{enumerate}
+
+La normalisation $L_2$ est ce qui rend loisible un produit scalaire pur en
+similitude cosinus (et justifie \texttt{IndexFlatIP} plutôt que
+\texttt{IndexFlatL2}). Le device est forcé à \texttt{"cpu"}, l'import de Torch
+est différé à la première ingestion et l'instance est mise en cache au niveau de
+classe : un appel de recherche ne recharge jamais le plongeur, et le module ne
+demande jamais un bloc GPU --- sinon il ferait concurrence au LoRA du Module 1.
+
+Coûts mesurés sur la machine de référence : chargement de l'index
+\textbf{0,38~s}, premier appel de recherche (comprenant le chargement du
+plongeur depuis le cache local) \textbf{12,63~s}, puis \textbf{18 à 20~ms} par
+recherche suivante. Cette asymétrie froide/chaude est la raison pour laquelle le
+service appelle \texttt{warm()} au démarrage (§\ref{sec:rag-service}).
+
+\subsection{Index et recherche}
+\label{sec:rag-index}
+
+\texttt{rag/store.py} construit un \texttt{faiss.IndexFlatIP}
+\cite{johnson2019faiss} --- recherche exhaustive, donc \emph{exacte} et sans
+paramètre à régler. Sur 72~$\times$~384 dimensions, le coût est de
+72~$\times$~384~$\times$~4 octets $=110\,592$ octets de vecteurs (fichier
+\texttt{knowledge.faiss} : 110\,637 octets avec l'en-tête ;
+\texttt{knowledge\_meta.json} : 88\,404 octets). Une indexation approchée
+n'apporte rien ici ; elle introduirait un entraînement et une perte de rappel.
+
+Deux précautions d'intégrité : l'écriture des deux fichiers passe par
+\texttt{os.replace} atomique (un index à moitié écrit ne doit jamais être
+rechargé), et au chargement une vérification compare \texttt{ntotal} de l'index au
+nombre d'enregistrements du méta --- désaccord = index non disponible, pas de
+recherche sur des vecteurs décalés.
+
+L'artefact est régénérable et non versionné (\texttt{data/} est ignoré par git) :
+\texttt{python -m interview\_adam.rag.ingest}.
+
+\subsection{De la requête au bloc injecté}
+\label{sec:rag-service}
+
+\texttt{rag/retriever.py} implémente la politique, avec quatre réglages
+(constantes \file{config\_adam.py} : \texttt{ADAM\_RAG\_TOP\_K}=2,
+\texttt{ADAM\_RAG\_MIN\_SCORE}=0,20, \texttt{ADAM\_RAG\_CANDIDATES}=9,
+\texttt{ADAM\_MAX\_RAG\_CHUNK\_CHARS}=340,
+\texttt{ADAM\_MAX\_RAG\_CONTEXT\_CHARS}=900) :
+
+\begin{enumerate}[label=\arabic*.,leftmargin=*,itemsep=2pt]
+  \item \textbf{Extension FR$\to$EN} (\texttt{expand\_query}) : le corpus est
+        anglais, la requête est souvent française. Un glossaire de
+        \textbf{25~termes} (\texttt{FR\_TO\_EN}) ajoute les traductions
+        attendues, après \texttt{\_ascii\_fold} (suppression des accents, mise
+        en bas de casse) qui fait la correspondance.
+  \item \textbf{Sur-échantillonnage} : 9 candidats sont récupérés avant tout
+        filtrage, pour que le reclassement par domaine ne fasse pas disparaître
+        un bon fragment simplement moins « générique » --- la pondération serait
+        sinon un tri après coup.
+  \item \textbf{Pondération par domaine} : chaque type d'appel a ses poids
+        (\texttt{DOMAIN\_PRIORITY}, tableau~\ref{tab:domainpriority}).
+  \item \textbf{Seuil} : sous 0,20 le fragment est jeté. Le seuil est calibré
+        sur les scores \emph{réels} de ce corpus (bons domaines : 0,27--0,52 ;
+        hors-sujet typique : 0,21 ou moins, cf.
+        tableau~\ref{tab:retrieval}) --- en dessous, on n'injecterait que du
+        bruit.
+  \item \textbf{Troncature et bornes} : chaque fragment est coupé à 340~car.,
+        le bloc complet à 900~car. Une fiche entière ferait $\approx$1,5~k
+        caractères ; seule l'amorce est nécessaire comme référence de barème,
+        et le budget prompt est sacré (§\ref{sec:modele-budget}).
+  \item \textbf{Garde-fou optionnel} : \texttt{ADAM\_RAG\_REQUIRE\_OVERLAP} ne
+        conserve que les fragments partageant un mot réel avec la requête. Par
+        défaut \textbf{désactivé} avec un plongeur dense, qui rapproche
+        utilement des synonymes sans mot commun.
+\end{enumerate}
+
+\begin{small}
+\begin{table}[H]
+\centering
+\caption{Pondérations de domaine par type d'appel (multiplicateur appliqué au score de
+similarité avant reclassement).}
+\label{tab:domainpriority}
+\begin{tabular}{@{}l rrr@{}}
+\toprule
+\textbf{Domaine} & \textbf{questions} & \textbf{evaluate} & \textbf{improve} \\
+\midrule
+\texttt{web-dev}       & 1,15 & 1,00 & 1,05 \\
+\texttt{data-ai}       & 1,15 & 1,00 & 1,05 \\
+\texttt{devops}        & 1,15 & 1,00 & 1,05 \\
+\texttt{hr-behavioral} & 1,15 & 1,05 & 1,05 \\
+\texttt{star-method}   & 1,05 & 1,15 & \textbf{1,30} \\
+\texttt{rubrics}       & 0,85 & \textbf{1,35} & 1,10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{small}
+
+La logique est lisible : pour générer des questions on veut les domaines de
+contenu ; pour évaluer on veut le barème (\texttt{rubrics}) ; pour améliorer on
+veut la méthode STAR. \texttt{rubrics} est délibérément \emph{décoté} à 0,85
+dans les questions : un barème n'a rien à faire dans une question.
+
+\subsection{Exemples réels de récupération}
+\label{sec:rag-exemples}
+
+Tableau~\ref{tab:retrieval} : les 8 requêtes ont été lancées contre l'index
+réel avec le plongeur réel (script de mesure hors dépôt, reproductible), top~3
+affiché par requête alors que le module n'en injecte que 2.
+
+\begin{small}
+\begin{longtable}{@{}>{\cellflush}p{4.0cm} r
+                  >{\cellflush}p{6.0cm}
+                  >{\cellflush}p{3.0cm}@{}}
+\caption{Récupération réelle sur l'index FAISS avec le plongeur
+\file{all-\brk{}MiniLM-\brk{}L6-\brk{}v2} --- 8 requêtes, top~3 affiché par requête alors que le
+module n'injecte que les 2 premiers fragments. Scores = similarité cosinus après
+pondération de domaine.}\label{tab:retrieval}\\
+\toprule
+\textbf{Requête} & \textbf{Score} & \textbf{Fragment récupéré} & \textbf{Domaine / type} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Requête} & \textbf{Score} & \textbf{Fragment récupéré} & \textbf{Domaine / type} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\emph{Q1 --- « Développeur Back-End Java Spring Boot injection de dépendances tests »} (questions) & & & \\
+ & 0,399 & The testing pyramid applied to a small web app & web-dev / guideline \\
+ & 0,344 & CI/CD: what a good pipeline actually guarantees & devops / question \\
+ & 0,266 & Designing for failure: timeouts, retries, idempotency & devops / guideline \\
+\addlinespace
+\emph{Q2 --- « DevOps conteneurisation Docker pipeline CI déploiement »} (questions) & & & \\
+ & 0,521 & Docker Compose for local development of a full stack & devops / guideline \\
+ & 0,496 & CI/CD: what a good pipeline actually guarantees & devops / question \\
+ & 0,460 & Writing a small, safe Docker image & devops / guideline \\
+\addlinespace
+\emph{Q3 --- « Data Science overfitting régularisation validation croisée »} (questions) & & & \\
+ & 0,483 & Overfitting: how to recognise it and what actually reduces it & data-ai / question \\
+ & 0,289 & Data leakage and split design & data-ai / guideline \\
+ & 0,263 & LLM output validation and repair loops & data-ai / guideline \\
+\addlinespace
+\emph{Q4 --- « Comment optimises-tu une requête SQL lente ? »} (evaluate) & & & \\
+ & 0,419 & N+1 queries and how to fix them & web-dev / question \\
+ & 0,249 & Pandas and SQL: what each is for & data-ai / guideline \\
+\addlinespace
+\emph{Q5 --- « Raconte-moi une fois où tu as dû convaincre un collègue »} (improve) & & & \\
+ & 0,266 & Describe a conflict with a teammate & hr-behavioral / question \\
+\addlinespace
+\emph{Q6 --- « Star method situation tâche action résultat »} (questions) & & & \\
+ & 0,488 & STAR: what each letter has to deliver & star-method / guideline \\
+ & 0,459 & STAR for a failure: what changes in the structure & star-method / question \\
+ & 0,393 & Action: the part that is actually graded & star-method / guideline \\
+\addlinespace
+\emph{Q7 --- « Plomberie industrielle soudure TIG »} (questions, hors domaine) & & & \\
+ & 0,213 & Why do you want to work here & hr-behavioral / question \\
+\addlinespace
+\emph{Q8 --- « qqq www zzz »} (questions, absurde) & & & \\
+ & 0,292 & N+1 queries and how to fix them & web-dev / question \\
+\end{longtable}
+\end{small}
+
+\textbf{Lecture.} Q1 à Q6 sont des récupérations utiles, avec des scores de
+domaine entre 0,266 et 0,521. Q5 est plus faible (0,266) et unique : la base ne
+comporte qu'une fiche sur le conflit d'équipe. Q7 et Q8 sont les deux échecs
+documentés : hors domaine et absurde franchissent quand même le seuil de 0,20.
+Le module injecte donc un fragment non pertinent dans ces deux cas --- d'où la
+précaution du §\ref{sec:rag-limites}.
+
+L'extension lexicale est visible dans les traces : « tests » $\to$
+\texttt{testing}, « déploiement » $\to$ \texttt{deployment release}, « collègue »
+$\to$ \texttt{teammate colleague}, « résultat » $\to$ \texttt{result outcome}.
+Q4, Q5 et Q6 ne récupèrent le bon domaine \emph{que} grâce à cette extension.
+
+\subsection{Traçabilité et injection}
+
+Un appel renvoie deux choses : le bloc texte \texttt{<references>} et la liste
+\texttt{rag\_sources} (identifiant, domaine, titre). Les deux voyagent jusqu'à
+l'interface : la page affiche une puce « Base documentaire » et la source
+exacte, ce qui permet à l'étudiant de vérifier d'où vient un conseil plutôt que
+de le prendre pour une opinion du modèle. Cinq positions d'injection selon
+l'appel : « Références de barème et questions types du domaine » (questions),
+« Barème du domaine » (évaluation), « Fiches de méthode » (amélioration) ---
+chacune introduites comme référence « à adapter, pas à recopier ».
+
+\subsection{Dégradation gracieuse}
+\label{sec:rag-degrade}
+
+Le RAG ne peut pas faire échouer un appel, par construction :
+
+\begin{itemize}[itemsep=2pt]
+  \item index absent, méta corrompu, \texttt{ntotal} désaccordé, Torch ou FAISS
+        non installés $\Rightarrow$ le store n'est pas disponible, la recherche
+        retourne un tableau vide ;
+  \item exception dans la recherche $\Rightarrow$ \texttt{service.\_retrieve()}
+        l'avale, journalise, et le prompt part \emph{sans} bloc
+        \texttt{<references>} --- les prompts sont écrits pour fonctionner dans
+        les deux cas ;
+  \item le statut \texttt{/interview/status} expose \texttt{rag\_used} et le
+        nombre de fragments, et la puce « Base documentaire » n'apparaît que si
+        l'injection a réellement eu lieu.
+\end{itemize}
+
+Le même chemin a été vérifié côté interface : sans index, la séance se déroule
+normalement, seules les puces disparaissent (test \texttt{broken retriever
+toléré}, §\ref{sec:tests}).
+
+\subsection{Limites du RAG}
+\label{sec:rag-limites}
+
+\begin{enumerate}[label=\textbf{(\alph*)},leftmargin=*,itemsep=2pt]
+  \item \textbf{Langue.} Le corpus est anglais et le vocabulaire appris du
+        plongeur aussi : un fragment français n'est récupérable que si le
+        glossaire de 25 termes fait le pont. Hors du glossaire, la récupération
+        française est faible --- documenté, non corrigé (§\ref{sec:limites}).
+  \item \textbf{Seuil trop permissif sur les hors-sujets.} Mesuré : une requête
+        absurde marque 0,292 et une requête de plomberie 0,213, soit au-dessus
+        du seuil de 0,20. Un seuil plus haut (0,30) élimine ces deux cas mais
+        jetterait Q5 (0,266) et la deuxième récupération de Q3 (0,289) --- la
+        mesure a tranché en faveur de 0,20.
+  \item \textbf{Corpus petit et fermé.} 72 fragments, 6 domaines, écrits par le
+        module : un poste hors de ces domaines (métier du droit, santé, vente)
+        n'a aucune référence, et le prompt reçoit alors un bloc vide sans que
+        cela se voie.
+  \item \textbf{Latence froide.} 12,63~s pour le premier appel (chargement du
+        plongeur), masquée par un \texttt{warm()} au démarrage mais visible si
+        le service redémarre en milieu de séance.
+  \item \textbf{Priorité de domaine statique.} Les poids du
+        tableau~\ref{tab:domainpriority} sont des constantes, pas un classifieur
+        : une question « technique » sur un projet de data-ai dans un poste web
+        récupère les deux domaines au même poids.
+\end{enumerate}

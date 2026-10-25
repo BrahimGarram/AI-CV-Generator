@@ -1,0 +1,43 @@
+% Rendu JSON de IMPROVEMENT_SCHEMA (interview_adam/schemas_adam.py).
+\begin{lstlisting}[style=adamjson]
+{
+ "type": "object",
+ "properties": {
+  "improved_answer": {
+   "type": "string"
+  },
+  "star": {
+   "type": "object",
+   "properties": {
+    "situation": {
+     "type": "string"
+    },
+    "task": {
+     "type": "string"
+    },
+    "action": {
+     "type": "string"
+    },
+    "result": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "situation",
+    "task",
+    "action",
+    "result"
+   ]
+  },
+  "tips": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  }
+ },
+ "required": [
+  "improved_answer"
+ ]
+}
+\end{lstlisting}

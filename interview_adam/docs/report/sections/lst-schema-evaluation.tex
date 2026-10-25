@@ -1,0 +1,56 @@
+% Rendu JSON de EVALUATION_SCHEMA (interview_adam/schemas_adam.py).
+\begin{lstlisting}[style=adamjson]
+{
+ "type": "object",
+ "properties": {
+  "score": {
+   "type": "number"
+  },
+  "criteria": {
+   "type": "object",
+   "properties": {
+    "relevance": {
+     "type": "number"
+    },
+    "clarity": {
+     "type": "number"
+    },
+    "structure": {
+     "type": "number"
+    },
+    "technical_accuracy": {
+     "type": "number"
+    }
+   },
+   "required": [
+    "relevance",
+    "clarity",
+    "structure",
+    "technical_accuracy"
+   ]
+  },
+  "strengths": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "weaknesses": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "verdict": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "score",
+  "criteria",
+  "strengths",
+  "weaknesses",
+  "verdict"
+ ]
+}
+\end{lstlisting}

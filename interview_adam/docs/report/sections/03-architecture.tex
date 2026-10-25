@@ -1,0 +1,445 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Architecture}
+\label{sec:archi}
+
+\subsection{Vue d'ensemble}
+
+La figure~\ref{fig:archi} donne la structure complète du module. Le client ne
+parle jamais directement au moteur d'inférence : tout passe par le routeur
+FastAPI, qui exige un jeton d'authentification, puis par le service
+d'orchestration. Le service est le seul point de décision : c'est lui qui
+compose le prompt, interroge l'index documentaire, valide la sortie, tente une
+réparation et, si nécessaire, choisit un repli.
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[font=\sffamily]
+    % ---- bande client ---------------------------------------------------
+    \node[adamext]  (m1)   at (0,0)      {Éditeur de CV\\{\scriptsize Module 1}};
+    \node[adamsvc]  (page) at (4.2,0)    {AdamInterviewPage\\{\scriptsize route /interview}};
+    \node[adamsvc]  (queue) at (8.4,0)   {File d'attente RxJS\\{\scriptsize une analyse à la fois}};
+    \node[adamsvc]  (api)  at (12.6,0)   {interview-adam.api.ts\\{\scriptsize HttpClient + Bearer}};
+    \node[adambox]  (rel)  at (12.6,-2.2){releaseOnUnload()\\{\scriptsize fetch \ldots keepalive}};
+
+    % ---- bande serveur --------------------------------------------------
+    \node[adamext]  (app)  at (0,-4.4)   {app/api.py\\{\scriptsize montage du routeur}};
+    \node[adamsvc]  (rout) at (4.2,-4.4) {router.py\\{\scriptsize /interview/*}};
+    \node[adamsvc]  (serv) at (8.4,-4.4) {service.py\\{\scriptsize orchestration}};
+    \node[adamsvc]  (llm)  at (12.6,-4.4){llm\_adam.py\\{\scriptsize client Ollama}};
+    \node[adamext]  (oll)  at (16.8,-4.4){Ollama :11434\\{\scriptsize mistral 7B q4\_K\_M}};
+
+    % ---- bande ressources ----------------------------------------------
+    \node[adamsvc]  (prom) at (0,-7.4)   {prompts/*\\{\scriptsize 4 prompts}};
+    \node[adamsvc]  (rag)  at (4.2,-7.4) {rag/retriever\\{\scriptsize FAISS + MiniLM}};
+    \node[adamsvc]  (fb)   at (8.4,-7.4) {fallbacks.py\\{\scriptsize replis}};
+    \node[adamsvc]  (db)   at (12.6,-7.4){db\_adam.py\\{\scriptsize sessions, qa}};
+    \node[adamdb]   (sql)  at (16.8,-7.4){SQLite\\{\scriptsize data/cv\_platform.db}};
+    \node[adamsvc]  (cvb)  at (4.2,-9.6) {cv\_bridge.py\\{\scriptsize lecture seule M1}};
+    \node[adamsvc]  (priv) at (0,-9.6)   {privacy.py + security.py\\{\scriptsize anonymisation, gabarit}};
+
+    % ---- flèches --------------------------------------------------------
+    \draw[adamflow] (m1) -- (page);
+    \draw[adamflow] (page) -- (queue);
+    \draw[adamflow] (queue) -- (api);
+    \draw[adamflow] (api) -- (rel);
+    \draw[adamflow] (api.south) |- node[mlab,pos=.25,above]{HTTPS Bearer} (rout.north);
+    \draw[adamflow] (app) -- (rout);
+    \draw[adamflow] (rout) -- (serv);
+    \draw[adamflow] (serv) -- (llm);
+    \draw[adamflow] (llm) -- node[mlab,above]{POST /api/generate} (oll);
+    \draw[adamback] (llm.south) |- (rag.north) node[mlab,pos=.75,below]{requête RAG};
+    \draw[adamflow] (serv.south) -- node[mlab,right]{prompt} (prom.north);
+    \draw[adamflow] (prom.west) .. controls +(-1,0) and +(0,1) .. (priv.east);
+    \draw[adamflow] (rag) -- (cvb);
+    \draw[adamflow] (serv.south) |- (fb.north);
+    \draw[adamflow] (rout.south) |- (db.north);
+    \draw[adamflow] (db) -- (sql);
+    \draw[adamback] (rel.east) -| node[mlab,pos=.25,above]{pagehide / ngOnDestroy} (rout.east);
+
+    % ---- légende --------------------------------------------------------
+    \node[lam, anchor=north west] at (-1.6,-10.9)
+      {\textbf{Légende} : boîte pleine = code du Module 3 \quad
+       boîte pointillée = code du Module 1 ou service externe \quad
+       flèche pointillée = appel secondaire ou asynchrone};
+  \end{tikzpicture}}
+  \caption{Architecture générale du simulateur d'entretien et points de contact
+    avec le Module~1.}
+  \label{fig:archi}
+\end{figure}
+
+Deux propriétés structurelles méritent d'être soulignées.
+
+\paragraph{Un seul point de sortie vers le modèle.} Tout appel à Ollama passe
+par \file{llm\_adam.py}. Cette concentration permet d'imposer une seule
+politique : sémacphore de concurrence, bornes de timeout, retries avec reculée
+exponentielle, messages d'erreur français et, surtout, un contrôle de
+confidentialité émis \emph{avant} la moindre octet envoyé
+(\const{assert\_anonymized(prompt)} dans \file{llm\_adam.py:143}).
+
+\paragraph{Le module ne connaît le Module~1 que par une interface de lecture.}
+\file{cv\_bridge.py} est le seul fichier qui importe \file{db.py}, et uniquement
+\const{get\_generation}. Un test (\file{test\_cv\_bridge.py}) remplace les
+fonctions d'écriture du Module~1 par une fonction qui lève, ce qui rend une
+écriture accidentelle impossible sans le savoir.
+
+\subsection{Structure du backend}
+
+\begin{small}
+\begin{tabularx}{\textwidth}{@{}>{\cellflush}p{4.3cm}
+                             >{\cellflush}X@{}}
+  \toprule
+  \textbf{Fichier} & \textbf{Rôle}\\
+  \midrule
+  \file{config\_adam.py} (208 l.) & Toutes les constantes et leur variable
+    d'environnement. Aucun autre fichier ne lit \file{.env}.\\
+  \file{router.py} (176 l.) & 8 routes FastAPI sous le préfixe
+    \route{/\brk{}interview}, toutes derrière \const{current\_user}. Traduit les
+    erreurs internes en \code{HTTPException} à message français.\\
+  \file{service.py} (511 l.) & Orchestration : contexte, RAG, prompt, appel,
+    validation Pydantic, réparation, repli, persistance, synthèse.\\
+  \file{llm\_adam.py} (318 l.) & Client HTTP d'Ollama. Sémacphore, retries,
+    typage des pannes, analyse de la sortie JSON, \const{is\_available()},
+    \const{release()}.\\
+  \file{schemas\_adam.py} (425 l.) & Deux familles : les modèles Pydantic
+    (contrat d'API et validation de sortie) et les schémas JSON aplatis envoyés
+    dans \var{format}.\\
+  \file{db\_adam.py} (242 l.) & Deux tables SQLite, schéma idempotent,
+    connexions sérialisées par un verrou.\\
+  \file{privacy.py} (186 l.) & Anonymisation du CV, nettoyage des textes
+    libres, recherche de données personnelles résiduelles.\\
+  \file{security.py} (60 l.) & Neutralisation des marqueurs de gabarit,
+    troncature propre, encadrement des contenus par délimiteurs.\\
+  \file{fallbacks.py} (191 l.) & Replis déterministes : banque de questions,
+    analyse heuristique sans note, consigne STAR sans IA.\\
+  \file{cv\_bridge.py} (99 l.) & Lecture seule des CV du Module~1, condensat
+    anonymisé, écart offre/profil par vocabulaire de 96 termes, point de
+    branchement pour les offres.\\
+  \file{prompts/\brk} (5 fichiers) & \file{base\_adam.py} (assemblage Mistral,
+    budget, délimiteurs) et les trois prompts métier plus le prompt de
+    réparation.\\
+  \file{rag/\brk} (5 fichiers) & Découpage Markdown, plongeur CPU, index FAISS,
+    retriever, CLI d'ingestion et de recherche.\\
+  \file{knowledge/\brk} (6 fichiers) & Base documentaire en anglais, 1\,150 lignes.\\
+  \file{tests/\brk} (9 fichiers) & 2\,368 lignes, 201 tests.\\
+  \bottomrule
+\end{tabularx}
+\end{small}
+
+Le paquet est autonome : \file{interview\_adam/\brk\_\_\_init\_\_\_.py} déclare
+qu'il ne modifie aucun fichier du Module~1 et ne réutilise en lecture que
+\file{config.py}, \file{db.py}, \file{auth.py} et \file{cv\_schema.py}.
+
+\subsection{Structure du frontend}
+
+Le frontend occupe \file{frontend/\brk{}src/\brk{}app/\brk{}interview-\brk{}adam/\brk} (16 fichiers,
+2\,751 lignes) et se limite à quatre composants autonomes, chargés par route
+lazy :
+
+\begin{itemize}[leftmargin=1.6em,itemsep=1pt,topsep=2pt]
+  \item \file{adam-\brk{}interview-\brk{}page.ts} (79 l.) : coquille de page. Un signal
+    \const{mode} vaut \const{'setup'}, \const{'run'} ou \const{'history'}.
+    C'est lui qui branche l'écouteur \file{pagehide} et qui appelle la
+    libération de VRAM.
+  \item \file{adam-\brk{}interview-\brk{}setup.ts} (110 l.) : formulaire de lancement,
+    valeurs par défaut (6 questions, mixte, junior, français, sans CV) et
+    sélecteur de CV alimenté par \route{GET /history}.
+  \item \file{adam-\brk{}interview-\brk{}run.ts} (222 l.) : l'entretien lui-même, une carte
+    par question, la file d'arrière-plan et la synthèse.
+  \item \file{adam-\brk{}interview-\brk{}history.ts} (84 l.) : historique, relecture en
+    lecture seule, suppression avec confirmation.
+\end{itemize}
+
+Deux fichiers sans composant complètent l'ensemble : \file{models.ts} (175 l.),
+qui transpose en TypeScript les modèles Pydantic du backend, et
+\file{labels.ts} (40 l.), qui centralise les libellés français et le formatage
+des notes.
+
+\paragraph{État par question.} Chaque carte est décrite par deux cellules
+indépendantes \const{EvalCell} et \const{ImproveCell}, dont l'état appartient à
+\const{\{'idle' | 'queued' | 'running' | 'done' | 'error'\}}. Les valeurs par
+défaut sont des constantes gelées partagées, pour ne pas recréer un objet vide
+par question à chaque rendu.
+
+\paragraph{La file d'attente.} Le composant de déroulement maintient trois
+champs privés : une liste \const{queue} de travaux, un champ \const{running}
+jouant le rôle de jeton d'exclusion mutuelle, et un drapeau \const{destroyed}.
+Le texte de la réponse est \emph{figé à l'entrée en file} : attendre ne peut
+pas faire analyser un texte que le candidat a modifié entre-temps.
+La méthode \const{drain()} refuse d'entrer si le composant est détruit, si un
+travail tourne déjà, ou si la file est vide ; sinon elle dépile un travail, le
+marque \const{running} et s'abonne à l'appel HTTP.
+
+Le point de conception le plus important est l'utilisation de
+\const{finalize()} et non de \const{complete()} pour libérer le jeton
+(\file{adam-\brk{}interview-\brk{}run.ts:175} et \file{:189}). Un flux RxJS en erreur
+n'émet \emph{jamais} \const{complete} : avec \const{complete}, le premier échec
+laissait \const{running} occupé indéfiniment et toutes les analyses restantes
+resteront en attente. Ce bogue, trouvé en navigateur réel, est détaillé en
+section~\ref{sec:bugs}.
+
+\paragraph{Libération de la VRAM côté client.} Deux chemins coexistent, parce
+que les deux situations sont différentes. Pour une navigation interne Angular
+(la page est encore vivante), \const{ngOnDestroy()} appelle
+\code{api.release()} via \const{HttpClient}. Pour un rechargement ou une
+fermeture d'onglet, \const{HttpClient} est annulé par le navigateur pendant la
+phase de déchargement du document : on utilise alors un \code{fetch} natif avec
+\code{\{keepalive: true\}} (\file{interview-\brk{}adam.api.ts:79}), et comme
+l'intercepteur Angular ne s'applique pas à \code{fetch}, l'en-tête
+\code{Authorization} est posé à la main. Un drapeau \const{unloadFired} garantit
+un appel unique.
+
+\subsection{Modèle de données}
+\label{sec:modeles}
+
+Le module écrit dans le même fichier SQLite que la plateforme
+(\file{data/\brk{}cv\_platform.db}), mais avec sa propre connexion et son propre
+verrou : \file{db.py} n'est ni importé ni modifié. Le schéma est idempotent
+(\code{CREATE TABLE IF NOT EXISTS}) et appliqué à la première utilisation ; le
+mode WAL n'est pas activé, parce qu'il changerait le fichier partagé avec le
+Module~1. Un \code{timeout=30} sur la connexion évite les erreurs
+«~database is locked~» quand les deux modules écrivent le même jour.
+
+\begin{small}
+\begin{tabularx}{\textwidth}{@{}>{\cellflush}p{3.9cm}
+                             >{\cellflush}p{2.2cm}
+                             >{\cellflush}X@{}}
+  \toprule
+  \textbf{Colonne} & \textbf{Type} & \textbf{Remarque}\\
+  \midrule
+  \multicolumn{3}{@{}l}{\textbf{\route{interview\_sessions}}}\\
+  \code{id} & TEXT PK & hexadécimal de 32 caractères (\code{uuid4().hex})\\
+  \code{user\_id} & TEXT & \code{REFERENCES users(id) ON DELETE CASCADE}\\
+  \code{job\_title}, \code{company}, \code{job\_description} & TEXT &
+    contexte saisi, déjà nettoyé\\
+  \code{seniority}, \code{question\_type}, \code{language} & TEXT & valeurs
+    contrôlées par Pydantic à l'entrée\\
+  \code{n\_questions} & INTEGER & nombre réellement retenu\\
+  \code{model} & TEXT & nom du modèle ; \code{NULL} si la session est un repli\\
+  \code{status} & TEXT & \code{in\_progress} ou \code{finished}\\
+  \code{cv\_generation\_id} & TEXT & référence au CV du Module~1, sans copie\\
+  \code{summary\_json} & TEXT & synthèse figée à la clôture\\
+  \code{created\_at}, \code{finished\_at} & TEXT & horodatages ISO~8601 UTC\\
+  \midrule
+  \multicolumn{3}{@{}l}{\textbf{\route{interview\_qa}}}\\
+  \code{id} & TEXT PK & identifiant technique\\
+  \code{session\_id} & TEXT & \code{REFERENCES interview\_sessions(id)
+    ON DELETE CASCADE}\\
+  \code{idx} & INTEGER & numéro de question, à partir de 1\\
+  \code{question}, \code{category}, \code{focus} & TEXT & question générée\\
+  \code{expected\_json} & TEXT & barème attendu, liste de 2 à 4 points\\
+  \code{answer} & TEXT & réponse du candidat, \code{NULL} tant que non analysée\\
+  \code{score} & REAL & note globale ; \code{NULL} = non notée\\
+  \code{criteria\_json}, \code{strengths\_json}, \code{weaknesses\_json} & TEXT
+    & sortie d'évaluation\\
+  \code{verdict} & TEXT & verdict rédigé\\
+  \code{improved\_json} & TEXT & réponse améliorée + STAR + conseils\\
+  \code{created\_at}, \code{answered\_at} & TEXT & horodatages\\
+  \bottomrule
+\end{tabularx}
+\end{small}
+
+Deux index accompagnent le schéma : \code{idx\_interview\_sessions\_user} sur
+\code{(user\_id, created\_at DESC)} pour l'historique, et
+\code{idx\_interview\_qa\_session} sur \code{(session\_id, idx)} pour la
+relecture d'une session.
+
+\paragraph{Relations et cloisonnement.} La seule clé étrangère sortante est
+\code{interview\_sessions.user\_id $\rightarrow$ users(id)}, table du Module~1 ;
+la suppression en cascade est donc double : supprimer un compte emporte les
+sessions, et supprimer une session emporte ses réponses
+(\code{interview\_qa.session\_id}). Mis à part cette clé, aucune table du
+Module~1 n'est référencée : \code{cv\_generation\_id} est stocké comme un simple
+texte, ce qui laisse le Module~1 libre de sa propre politique de suppression.
+
+\paragraph{Isolation par utilisateur.} \emph{Toute} requête de lecture ou
+d'écriture est bornée par \code{user\_id} dans sa clause \code{WHERE}
+(\file{db\_adam.py:146}, \file{:217}, \file{:231}). Un identifiant de session
+appartenant à un autre compte répond 404, jamais 403 : un 403 confirmerait
+qu'une session existe, or l'identifiant est la seule chose qui protège le
+contenu d'un entretien.
+
+\subsection{Diagrammes de séquence}
+\label{sec:seq}
+
+Les quatre scénarios ci-dessous résument les échanges réels, tels qu'ils ont
+été observés dans les journaux pendant les runs Playwright de
+section~\ref{sec:tests}.
+
+\subsubsection{Génération des questions}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[font=\sffamily]
+    \node[ll] (c) at (0,0)     {Candidat};
+    \node[ll] (f) at (4.0,0)   {Angular};
+    \node[ll] (s) at (8.0,0)   {service.py};
+    \node[ll] (r) at (11.6,0)  {retriever};
+    \node[ll] (l) at (15.2,0)  {Ollama};
+    \node[ll] (d) at (18.4,0)  {SQLite};
+    \foreach \x in {c,f,s,r,l,d} \draw[lifeline] (\x.south) -- ++(0,-6.6);
+
+    \draw[msg] (c) -- node[mlab,above]{formulaire} (f);
+    \draw[msg] (f) -- node[mlab,above]{POST /interview/questions} (s);
+    \draw[msg] (s) -- node[mlab,above]{CV anonymisé, écarts} (d);
+    \draw[msg] (s) -- node[mlab,above]{retrieve(`questions')} (r);
+    \draw[rmsg] (r) -- node[mlab,above]{top-2 $\geq$ 0,20} (l);
+    \draw[rmsg] (r) -- node[mlab,below]{contexte + sources} (s);
+    \draw[msg] (s) -- node[mlab,above]{prompt + QUESTION\_SET\_SCHEMA} (l);
+    \draw[rmsg] (l) -- node[mlab,below]{JSON validé par Pydantic} (s);
+    \draw[msg] (s) -- node[mlab,above]{create\_session, attach\_questions} (d);
+    \draw[rmsg] (s) -- node[mlab,below]{QuestionsOut} (f);
+    \draw[rmsg] (f) -- node[mlab,below]{cartes + puces RAG} (c);
+  \end{tikzpicture}}
+  \caption{Génération des questions. Le trait pointillé rouge marque une
+    réponse ; le RAG est interrogé \emph{avant} le modèle, et son absence ne
+    change rien au reste du flux.}
+  \label{fig:seq-questions}
+\end{figure}
+
+\subsubsection{Évaluation en arrière-plan, avec file}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[font=\sffamily]
+    \node[ll] (c) at (0,0)   {Candidat};
+    \node[ll] (q) at (4.2,0) {File RxJS};
+    \node[ll] (a) at (8.4,0) {API};
+    \node[ll] (s) at (11.8,0){service};
+    \node[ll] (l) at (15.4,0){Ollama};
+    \foreach \x in {c,q,a,s,l} \draw[lifeline] (\x.south) -- ++(0,-7.2);
+
+    \draw[msg] (c) -- node[mlab,above]{« Analyser Q1 »} (q);
+    \draw[msg] (q) -- node[mlab,above]{POST /evaluate (Q1)} (a);
+    \draw[msg] (a) -- (s);
+    \draw[msg] (s) -- (l);
+    \draw[msg] (c) -- node[mlab,above]{tape sa réponse à Q2} (c |- 0,-2.4);
+    \draw[msg] (c) -- node[mlab,above]{« Analyser Q2 »} (q);
+    \node[mlab, anchor=west] at (q.east |- 0,-3.6) {Q2 en file : \const{queued}};
+    \draw[rmsg] (l) -- node[mlab,below]{Q1 évaluée (Q1 \const{done})} (s);
+    \draw[rmsg] (s) -- (a);
+    \draw[rmsg] (a) -- node[mlab,below]{feedback Q1} (q);
+    \node[mlab, anchor=west] at (q.east |- 0,-5.4) {finalize $\rightarrow$ jeton
+      libre $\rightarrow$ \const{drain()}};
+    \draw[msg] (q) -- node[mlab,above]{POST /evaluate (Q2)} (a);
+    \draw[msg] (a) -- (s);
+    \draw[msg] (s) -- (l);
+    \draw[rmsg] (l) -- (s);
+    \draw[rmsg] (s) -- (a);
+    \draw[rmsg] (a) -- node[mlab,below]{feedback Q2} (c);
+  \end{tikzpicture}}
+  \caption{Deux analyses successives avec \const{MAX\_CONCURRENT\_LLM\_CALLS=1}.
+    Pendant que Q1 est en cours, la zone de saisie de Q2 reste utilisable ; Q2
+    passe par \const{queued} puis \const{running} puis \const{done}.}
+  \label{fig:seq-eval}
+\end{figure}
+
+\subsubsection{Amélioration à la demande}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[font=\sffamily]
+    \node[ll] (c) at (0,0)   {Candidat};
+    \node[ll] (f) at (4.2,0) {Angular};
+    \node[ll] (s) at (8.4,0) {service};
+    \node[ll] (db) at (11.9,0){SQLite};
+    \node[ll] (l) at (15.4,0){Ollama};
+    \foreach \x in {c,f,s,db,l} \draw[lifeline] (\x.south) -- ++(0,-5.2);
+
+    \draw[msg] (c) -- node[mlab,above]{clic « meilleure réponse »} (f);
+    \draw[msg] (f) -- node[mlab,above]{POST /improve \{session, index\}} (s);
+    \node[mlab, anchor=west] at (s.east |- 0,-1.5)
+      {relit la question, la réponse et l'évaluation déjà en base};
+    \draw[msg] (s) -- (db);
+    \draw[rmsg] (db) -- node[mlab,below]{Q + réponse + faiblesses} (s);
+    \draw[msg] (s) -- node[mlab,above]{prompt IMPROVEMENT\_SCHEMA} (l);
+    \draw[rmsg] (l) -- node[mlab,below]{improved\_answer, star, tips} (s);
+    \draw[msg] (s) -- node[mlab,above]{save\_improvement} (db);
+    \draw[rmsg] (s) -- node[mlab,below]{ImprovementOut} (f);
+    \draw[rmsg] (f) -- node[mlab,below]{bloc « Réponse améliorée »} (c);
+  \end{tikzpicture}}
+  \caption{L'amélioration relit l'évaluation déjà stockée : elle n'est pas
+    appelée avec le prompt d'évaluation en mémoire, ce qui garantit qu'un
+    rechargement de page ne change pas le résultat.}
+  \label{fig:seq-improve}
+\end{figure}
+
+\subsubsection{Libération de la VRAM}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[font=\sffamily]
+    \node[ll] (n) at (0,0)    {Navigation};
+    \node[ll] (f) at (4.4,0)  {Angular};
+    \node[ll] (a) at (8.6,0)  {router.py};
+    \node[ll] (l) at (12.4,0) {Ollama};
+    \node[ll] (m) at (16.2,0) {Module 1};
+    \foreach \x in {n,f,a,l,m} \draw[lifeline] (\x.south) -- ++(0,-4.6);
+
+    \draw[msg] (n) -- node[mlab,above]{pagehide / ngOnDestroy} (f);
+    \draw[msg] (f) -- node[mlab,above]{POST /interview/release (Bearer)} (a);
+    \draw[msg] (a) -- node[mlab,above]{keep\_alive = 0} (l);
+    \draw[rmsg] (l) -- node[mlab,below]{modèle déchargé} (a);
+    \draw[rmsg] (a) -- node[mlab,below]{\{released, model\}} (f);
+    \node[mlab, anchor=west] at (m.west |- 0,-4.0)
+      {\route{GET /api/ps} : 0 Mio occupé};
+    \draw[adamflow] (l) -- (m);
+  \end{tikzpicture}}
+  \caption{Libération explicite. Sans cet appel, \const{keep\_alive=5m} laisse
+    Mistral resident jusqu'à 5 minutes et le Module~1 ne peut pas charger
+    Qwen3-0.6B + LoRA.}
+  \label{fig:seq-release}
+\end{figure}
+
+\subsection{Branchement avec le Module~1}
+\label{sec:branchement}
+
+Le contrat passé avec l'équipe était de ne toucher au code du coéquipier
+qu'aux lignes strictement indispensables. Le résultat vérifié est le suivant.
+
+\begin{small}
+\begin{tabularx}{\textwidth}{@{}>{\cellflush}p{4.6cm}
+                             >{\cellflush}p{2.0cm}
+                             >{\cellflush}X@{}}
+  \toprule
+  \textbf{Fichier (propriété Module 1)} & \textbf{Lignes} & \textbf{Nature}\\
+  \midrule
+  \file{app/\brk{}api.py} & 56--57 & import du routeur, puis
+    \code{app.include\_router(interview\_router)}. \emph{Rien d'autre} : une
+    recherche de «~interview~» dans les 349 lignes du fichier ne renvoie que ces
+    deux lignes.\\
+  \file{frontend/\brk{}src/\brk{}app/\brk{}app.routes.ts} & 31--36 & une entrée de route
+    \code{path: 'interview'} avec le garde \code{authGuard} existant et un
+    \code{loadComponent} paresseux.\\
+  \file{frontend/\brk{}src/\brk{}app/\brk{}pages/\brk{}workspace/\brk{}workspace.html} & 46--50 & un
+    lien de menu «~Simuler un entretien~», qui réutilise la classe
+    \code{.menu-item} du design system.\\
+  \file{.env.example} & 9--60 & bloc de variables \file{ADAM\_*} et
+    \file{MISTRAL\_*}. Les quatre variables du Module~1
+    (\file{GEMINI\_API\_KEY}, \file{GEMINI\_MODEL},
+    \file{GEMINI\_FALLBACK\_MODELS}, \file{LLM\_PROVIDER}) conservent leur valeur
+    d'origine.\\
+  \bottomrule
+\end{tabularx}
+\end{small}
+
+\paragraph{Fichiers non touchés, vérifié.} Une recherche
+\code{grep -i "interview|adam|mistral"} ne renvoie aucun résultat dans
+\file{db.py}, \file{auth.py}, \file{generator.py}, \file{llm.py},
+\file{prompts.py}, \file{cv\_schema.py}, \file{guards.py}, \file{agent.py},
+\file{config.py} et \file{app/\brk{}main.py}.
+
+\paragraph{Aucun CSS global ajouté.} Les quatre feuilles de style du module
+consomment 20 jetons \code{var(-\brk{}-\brk{}\ldots)} déjà définis par le design system du
+coéquipier dans \file{frontend/\brk{}src/\brk{}styles.scss}, et ne déclarent aucune variable
+personnalisée. Le tableau des dépendances globales d'\file{angular.json}
+contient toujours une seule entrée.
+
+\paragraph{Ce qui reste à faire côté équipe.} Le \file{README.md} du dépôt
+(79 lignes) ne mentionne pas encore le Module~3 : la section d'usage doit être
+rédigée par l'équipe avec le reste de la documentation, ce qui correspond à
+l'item~7 du plan de reprise.

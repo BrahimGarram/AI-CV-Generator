@@ -1,0 +1,184 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Performances}
+\label{sec:perf}
+
+Toutes les chiffres de cette section viennent de mesures réelles sur la machine
+de référence (RTX 3050 Ti Laptop, 4096~Mio de VRAM, 13,9~Go de RAM, modèle
+\texttt{mistral:7b-instruct-v0.2-q4\_K\_M} servi par Ollama 0.40.11). Le script
+de mesure (\texttt{\_perf\_live.py}, hors dépôt) interroge Ollama en direct avec
+le même assemblage de payload que \file{llm\_adam.py}, et récupère les compteurs
+renvoyés par le moteur (\texttt{prompt\_eval\_count}, \texttt{eval\_count},
+\texttt{eval\_duration}) ; l'échantillonnage mémoire est fait par
+\texttt{nvidia-smi} juste après chaque appel.
+
+\subsection{Coût par étape}
+\label{sec:perf-latence}
+
+\begin{small}
+\begin{table}[H]
+\centering
+\caption{Les trois étapes du pipeline mesurées en \texttt{num\_gpu=0} (CPU pur),
+schéma envoyé uniquement par \texttt{format=}.}
+\label{tab:etapes-cpu}
+\begin{tabular}{@{}l r r r l r r@{}}
+\toprule
+\textbf{Étape} & \textbf{Temps} & \textbf{Tok/s} & \textbf{Sortie} & \textbf{Cap} & \textbf{Tok. prompt} & \textbf{Car. prompt} \\
+\midrule
+Questions ($n=3$) & 113,6 s & 6,3 & 302 t & 630 & 1\,797 & 5\,968 \\
+Évaluation        & 94,3 s  & 6,3 & 220 t & 420 & 1\,792 & 5\,425 \\
+Amélioration      & 121,5 s & 6,1 & 324 t & 520 & 2\,029 & 6\,591 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{small}
+
+\textbf{Levier principal : \texttt{num\_predict}, pas la taille du prompt.}
+Le préfill mesuré est de 9\,000 à 12\,300~tok/s selon la configuration : un
+prompt de 1800~tokens coûte donc $\approx$0,16~s, tandis que 300~tokens de
+sortie en CPU en coûtent $\approx$48. Réduire le prompt de 30\,\%
+(§\ref{sec:prompts-taille}) ne change la latence que de quelques dixièmes de
+seconde ; ce sont les caps par étape --- et la consigne de longueur dans le
+prompt --- qui ont fait baisser le temps perçu. Cette mesure a invalidé une
+hypothèse de travail initiale, et elle est la raison pour laquelle la
+réduction du prompt a été arrêtée là plutôt que poussée au détriment des
+consignes.
+
+\subsection{Balayage de \texttt{num\_gpu}}
+\label{sec:perf-numgpu}
+
+Même prompt d'évaluation (5425~caractères), modèle rechargé à chaque
+configuration après libération, donc chaque ligne part d'un état propre.
+
+\begin{small}
+\begin{table}[H]
+\centering
+\caption{Balayage \texttt{num\_gpu} $\in \{0, 10, 20, -1\}$ (valeurs de
+\texttt{ADAM\_MISTRAL\_NUM\_GPU} ; $-1$ = Ollama décide).}
+\label{tab:numgpu}
+\begin{tabular}{@{}l r r r r r r@{}}
+\toprule
+\textbf{\texttt{num\_gpu}} & \textbf{Froid} & \textbf{dont charge} & \textbf{Chaud} & \textbf{Gen. tok/s} & \textbf{Préfill tok/s} & \textbf{VRAM} \\
+\midrule
+0 (CPU pur)   & 110,0 s & 10,9 s & 36,7 s & 6,4  & 11\,073 & \multicolumn{1}{c}{0 MiB} \\
+10 couches    & 32,7 s  & 11,9 s & 19,0 s & 7,1  & 9\,424  & 1\,789 MiB \\
+20 couches    & 28,0 s  & 8,4 s  & 25,3 s & 9,6  & 12\,261 & \textbf{3\,321 MiB} \\
+$-1$ (auto)   & 39,5 s  & 7,6 s  & 21,2 s & 7,4  & 9\,050  & 2\,251 MiB \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{small}
+
+Les quatre configurations ont produit un JSON valide au premier essai. La
+lecture des données n'est pas triviale, parce que le critère n'est pas la seule
+latence :
+
+\begin{itemize}[itemsep=2pt]
+  \item Le GPU accélère réellement : 19--25~s en chaud contre 36,7~s en CPU, et
+        le débit de génération monte à 9,6~tok/s avec 20 couches déléguées.
+  \item Mais 20 couches consomment \textbf{3321~Mio sur 4096} : il reste
+        $\approx$775~Mio, et le Module 1 a besoin du GPU pour Qwen3-0.6B + LoRA.
+        Les deux modèles ne peuvent pas coexister dans cet état.
+  \item \texttt{num\_gpu=10} est le meilleur compromis mesuré en latence chaude
+        (19,0~s) pour une empreinte de 1789~Mio, soit un peu de marge.
+  \item \texttt{num\_gpu=-1} (le défaut d'Ollama, donc le défaut du module)
+        donne 21,2~s et 2251~Mio : rapide, mais Ollama peut en déléguer davantage
+        lorsqu'il croit avoir de la place, ce qui est précisément le scénario
+        d'OOM quand le Module 1 charge.
+\end{itemize}
+
+\textbf{Recommandation issue de la mesure} (écrite dans \file{.env.example}) :
+pour une démonstration ou une soutenance où le Module 1 est \emph{oisif},
+garder \texttt{-1} ou \texttt{10} et libérer en fin de séance ; pour un usage où
+les deux modules peuvent tourner en concurrence, \texttt{ADAM\_MISTRAL\_NUM\_GPU=0}
+--- plus lent d'environ 1,7$\times$ en chaud, mais jamais d'OOM, et l'entretien
+ne fait jamais planer le poste. Le défaut du code reste \texttt{-1} : le module
+ne présume pas de l'usage.
+
+\subsection{Froid contre chaud, et le plafond de timeout}
+\label{sec:perf-timeout}
+
+Sur un même prompt en \texttt{num\_gpu=0} : appel froid (modèle à charger)
+\textbf{108,6~s} dont $\approx$10,6~s de chargement pur ; appel chaud
+\textbf{37,1~s}. Soit un facteur 2,9 entre le premier appel d'une séance et les
+suivants --- et c'est le premier appel qui suit le bouton « Démarrer », donc
+celui que l'utilisateur juge.
+
+Le plafond de lecture mérite une explication à part, parce qu'il a produit un
+comportement contre-intuitif. \texttt{TIMEOUT\_READ} d'\texttt{requests} est un
+délai \emph{maximum entre deux octets}, pas une durée totale --- mais avec
+\texttt{stream=false}, Ollama n'écrit la réponse qu'une fois la génération
+terminée. Un read timeout vaut donc, ici, plafond de génération. Un appel de
+génération de questions avait duré \textbf{272~s} en apparence --- contre 110~s
+attendus --- et un seul appel froid bien calibré coûte 109~s ; l'écart s'est
+expliqué par la boucle de retry, puis reproduit par la mesure :
+
+\begin{quote}\small
+plafond initial 180~s $\to$ tentative 1 froide interrompue à 180~s, backoff
+$\approx$3~s, tentative 2 \textbf{chaude} $\approx$89~s $\to$ succès,
+\textbf{total $\approx$272~s}. Sur le prompt court de la campagne de mesure
+(appel froid 108,6~s, chaud 37,1~s), le même scénario donne $\approx$220~s.
+\end{quote}
+
+Le retry transformait donc un appel lent en appel deux fois plus long que
+nécessaire, avec une erreur intermédiaire invisible. Le correctif est le plafond
+\texttt{ADAM\_TIMEOUT\_READ=600} (l'ancien nom \texttt{ADAM\_MISTRAL\_TIMEOUT\_READ}
+reste accepté), qui laisse un appel froid aboutir au lieu de repartir en
+retry ; les tentatives supplémentaires (\texttt{ADAM\_MISTRAL\_RETRIES=2},
+backoff \texttt{3,0~s}$\times$essai + jitter aléatoire, \file{llm\_adam.py}:175--177)
+restent pour les pannes réseau et les 5xx. \texttt{SEMAPHORE\_TIMEOUT} vaut
+\texttt{TIMEOUT\_READ + 60}, pour qu'une requête en attente du sémaphore n'abandonne
+jamais avant celle qui tient le modèle.
+
+\subsection{Coexistence avec le Module 1 sur 4~Gio}
+\label{sec:perf-vram}
+
+Le module ne touche jamais le GPU directement : il ne demande de la VRAM
+qu'indirectement, par Ollama. Trois faits mesurés :
+
+\begin{enumerate}[label=\arabic*.,leftmargin=*,itemsep=2pt]
+  \item Mistral chargé occupe \textbf{2251~Mio} en configuration automatique
+        (2239~Mio relevés lors du parcours navigateur, même ordre).
+  \item \texttt{POST /interview/release} (méthode \texttt{release()},
+        \file{llm\_adam.py}:215--229, POST avec \texttt{keep\_alive: 0}) aboutit :
+        \texttt{ollama ps} revient vide et le GPU est mesuré à
+        \textbf{0~Mio / 4096~Mio}. Vérifié depuis le navigateur sur un vrai
+        rechargement, sur une navigation SPA vers l'éditeur de CV, et sur une
+        fermeture d'onglet.
+  \item \texttt{keep\_alive=5m} par défaut fait la même chose sans intervention,
+        avec cinq minutes de latence.
+\end{enumerate}
+
+\textbf{Limite mesurée, non corrigée.} Une libération demandée
+\emph{pendant} une génération en cours ne libère rien : la requête
+\texttt{keep\_alive: 0} est acceptée, mais le modèle reste chargé jusqu'à la fin
+de la génération en vol, et \texttt{ollama ps} n'est pas vide dans l'intervalle.
+C'est ce point qui a été noté en réserve à l'étape~7 du parcours navigateur.
+Le module pourrait le forcer (Ollama accepte une annulation de requête), mais
+cela signifierait couper une réponse en cours de rédaction --- ce qui a été
+jugé préférable de ne pas faire sans le demander à l'utilisateur. Le cas est
+documenté en §\ref{sec:limites} comme la principale réserve du volet mémoire.
+
+\subsection{Mesure reproductible pendant la rédaction de ce rapport}
+\label{sec:perf-controle}
+
+Quatre appels d'évaluation relancés avec le prompt de contrôle (script
+\texttt{calibrate\_eval.py}, \texttt{num\_gpu} par défaut) : 17,7~s ; 21,8~s ;
+28,4~s ; 34,1~s, pour des prompts de 4672 et 5182~caractères. Quatre réponses
+sur quatre valides au premier essai. Ces valeurs, plus basses que le
+\texttt{num\_gpu=0} du tableau~\ref{tab:etapes-cpu}, confirment la déléga-
+tion GPU effective dans la configuration par défaut. Le débit effectif dépend
+de la longueur réelle de la sortie (bornée à 420~tokens par
+\texttt{ADAM\_EVALUATE\_MAX\_TOKENS}), pas seulement de la configuration.
+
+\subsection{Ce qui n'est pas mesuré}
+\label{sec:perf-nonsources}
+
+Par honnêteté, les mesures absentes de ce chapitre : aucun test de charge
+concourante multi-utilisateurs (\texttt{MAX\_CONCURRENT\_LLM\_CALLS} protège le
+modèle, mais son comportement sous 10 utilisateurs simultanés n'a pas été
+mesuré) ; aucune latence de la voie d'erreur hors des deux scénarios testés
+(Ollama coupé, backend coupé) ; aucun pourcentage de couverture de code
+(\texttt{pytest --cov} n'a pas été lancé, cf. §\ref{sec:tests}) ; aucune mesure
+de qualité du score sur un jeu annoté (la calibration
+§\ref{sec:tests-calibration} porte sur 4 appels, pas sur un jeu d'or) ; aucun
+coût énergétique ni température.

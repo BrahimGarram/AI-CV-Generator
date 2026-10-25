@@ -1,0 +1,58 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Conclusion}
+\label{sec:conclusion}
+
+Le module livre les quatre fonctions annoncées --- génération de questions
+ancrées sur un poste, évaluation par barème à quatre critères, proposition d'une
+réponse améliorée structurée en STAR, historique des séances réouvrables --- avec
+« Utiliser mon CV » comme branche sur le Module 1 et un choix de langue
+français/anglais. Il le fait sans fine-tuning, par ingénierie de prompts et
+retrieval seulement, sur un modèle de 7~Md quantifié servi localement, dans un
+dépôt d'équipe dont il n'a modifié que trois fichiers de branchement.
+
+Ce qui, dans le travail effectué, nous paraît solide parce que mesuré :
+
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{La chaîne de décision de sortie tient.} 201 tests automatisés
+        (200 passés, 1 sauté conditionnel, 13,15~s), et dans toutes les voies
+        réelles explorées le JSON a été valide dès le premier essai : 10/10 en
+        calibration directe, 4/4 re-mesurés pour ce rapport. Le seul incident
+        observé (2 questions sur 3 renvoyées) a été traité par le chemin prévu ---
+        conservation des questions valides, question de repli marquée
+        \texttt{degraded}, réponse 201 --- sans retry et sans mensonge à
+        l'interface.
+  \item \textbf{La confidentialité est un invariant testé, pas une intention.}
+        Suppression structurelle de \texttt{personal\_info}, effacement par
+        expression régulière, neutralisation des marqueurs de gabarit en trois
+        passes, bornes d'entrée, contrôle final avant départ. Le parcours
+        navigateur a cherché six identifiants dans trois surfaces (payloads, page
+        rendue, prompt journalisé) : 0 occurrence --- après un correctif réel,
+        parce que la fuite existait (le titre de la génération CV).
+  \item \textbf{Les choix de modèle et de réglages sont justifiés par des
+        chiffres, y compris quand ils contredisent l'intention de départ.} La
+        mesure a montré que la taille du prompt est un levier de latence
+        négligeable (préfill $\approx$0,16~s pour 1800~tokens) et que
+        \texttt{num\_predict} est le seul qui compte ; elle a montré aussi que
+        20~couches déléguées au GPU consomment 3321~Mio sur 4096, ce qui rend la
+        cohabitation avec le Module 1 impossible --- d'où une recommandation
+        écrite, pas un réglage par habitude.
+  \item \textbf{L'interface a été validée dans un vrai navigateur, et cela a
+        changé le résultat.} Quatre des six défauts trouvés (blocage de la file
+        après erreur, étiquette périmée, message serveur écrasé, seuil non
+        expliqué) n'étaient pas atteignables par les tests unitaires.
+\end{itemize}
+
+Ce qui reste ouvert, et que nous écrivons sans l'adoucir : la qualité \emph{pédagogique} du score n'est pas démontrée au sens statistique --- quatre
+appels sur une question, sans jeu d'or annoté, avec un biais de longueur visible
+dans les données (§\ref{sec:tests-calibration}). La latence en CPU pur (10~minutes
+par séance) interdit la démonstration sur une machine sans GPU. La libération de
+mémoire ne fonctionne pas pendant une génération en cours. Le retrieval est
+faible en français hors de son glossaire de 25~termes, et son seuil laisse passer
+des hors-sujets mesurés à 0,21--0,29.
+
+La suite logique, pour nous, n'est pas d'ajouter des fonctions mais de fermer
+deux lacunes de méthode : constituer un jeu de réponses annotées par un recruteur
+pour tester la validité du barème, et mesurer réellement la co-tenance des deux
+modèles sur la carte de 4~Gio. Ce sont les points (c) et (d) des
+perspectives (§\ref{sec:limites}) --- les deux seuls dont dépendent des
+affirmations tenues aujourd'hui pour des hypothèses travaillées.

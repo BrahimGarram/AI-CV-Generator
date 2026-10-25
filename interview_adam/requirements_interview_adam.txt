@@ -1,0 +1,17 @@
+# Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI, IA for Software Engineering 2026-2027
+#
+# Dépendances ADDITIONNELLES du Module 3, à installer dans le même .venv que le Module 1 :
+#     pip install -r requirement.txt -r interview_adam/requirements_interview_adam.txt
+#
+# Rien de ce que requirement.txt installe déjà n'est re-épinglé ici (torch, transformers,
+# fastapi, pydantic, requests, uvicorn) : deux versions du même paquet dans un seul
+# environnement cassent la génération de CV.
+#
+# Les embeddings utilisent transformers (déjà présent) et torch sur CPU uniquement :
+# le module force device="cpu" et n'importe torch qu'à la première ingestion.
+
+faiss-cpu>=1.15,<2        # index vectoriel du RAG, version CPU seule (aucun GPU requis)
+
+# Tests (pytest n'est pas requis au runtime, mais l'est par la soutenance)
+pytest>=8
+httpx>=0.27               # fastapi.testclient a besoin de httpx

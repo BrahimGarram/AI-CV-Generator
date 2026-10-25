@@ -1,0 +1,99 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Stack technique et choix d'architecture}
+\label{sec:stack}
+
+Les versions indiquées au tableau~\ref{tab:stack} sont relevées dans les
+fichiers du dépôt et dans l'environnement installé, jamais de mémoire.
+Deux sources cohabitent :
+\file{requirement.txt} (liste du projet, Module 1) et
+\file{interview\_adam/\brk{}requirements\_interview\_adam.txt} (addons du Module 3,
+sans re-épingler ce que le Module 1 installe déjà).
+
+\subsection{Tableau des choix}
+
+\begin{small}
+\begin{longtable}{@{}>{\cellflush}p{2.45cm}
+                  >{\cellflush}p{1.45cm}
+                  >{\cellflush}p{3.3cm}
+                  >{\cellflush}p{3.5cm}
+                  >{\cellflush}p{3.6cm}@{}}
+\caption{Stack du module : rôle, justification, alternative écartée.}
+\label{tab:stack}\\
+\toprule
+\textbf{Technologie} & \textbf{Version} & \textbf{Rôle} & \textbf{Justification} & \textbf{Alternative écartée} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Technologie} & \textbf{Version} & \textbf{Rôle} & \textbf{Justification} & \textbf{Alternative écartée} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+FastAPI & 0.115.12 & Routeur HTTP du module & Déjà imposé par le Module 1 ; validation Pydantic native des schémas de sortie, dépendance d'authentification réutilisable. & Flask -- aurait ajouté une couche de validation et de documentation à écrire à la main. \\
+\addlinespace
+Uvicorn & \texttt{==0.34.2} épinglé ; \texttt{0.54.0} installé & Serveur ASGI & Contrainte du dépôt ; la version installée est plus récente, l'écart est documenté en §\ref{sec:stack-ecarts}. & -- \\
+\addlinespace
+Pydantic & 2.14.1 (transitive) & Contrats d'entrée/sortie, validation de la sortie du LLM & Version 2 : \const{model\_validate\_json} accepte directement le JSON brut du modèle et signale des erreurs exploitables par le prompt de réparation. & \texttt{dataclasses} + parse manuel -- aucune message d'erreur exploitable, aucune réparation automatique. \\
+\addlinespace
+SQLite & 3.x (stdlib) & Persistance des séances et des questions-réponses & Déjà la base du projet (\file{data/\brk{}cv\_platform.db}) ; zéro administration, transaction par appel, isolation par requête bornée sur \file{user\_id}. & PostgreSQL -- inutile pour un poste de développement, et casserait la promesse « aucune installation externe ». \\
+\addlinespace
+Ollama & 0.40.11 & Moteur d'inférence local & Seul composant capable de servir un 7\,Mds de paramètres sur 4\,Go de VRAM avec un contrôle fin (\texttt{raw}, \texttt{format}, \texttt{num\_gpu}, \texttt{keep\_alive}). & Transformers en process -- le module se serait partagé la mémoire du processus FastAPI avec le LoRA du Module 1. \\
+\addlinespace
+Mistral-7B-Instruct v0.2 & \texttt{q4\_K\_M}, 4\,369\,\allowbreak 387\,\allowbreak 721 octets & Génération des questions, évaluation, réécriture & Gabarit \texttt{[INST]}/\texttt{<</SYS>>} documenté, instruct et français décent, taille compatible avec le matériel. Voir §\ref{sec:modele}. & \texttt{qwen2:7b} -- non testé ; Llama-3-8B -- 4\,Go de VRAM insuffisants en q4\_K\_M avec le KV cache. \\
+\addlinespace
+all-\allowbreak MiniLM-\allowbreak L6-\allowbreak v2 & via \texttt{transformers} 4.57.3 & Plongées RAG (384 dimensions) & 384 dimensions, 22\,M de paramètres, CPU only : l'index se construit en secondes et ne prend aucun bloc GPU au Module 1. & \texttt{bge-base} (768 dim.) -- index deux fois plus gros, latence CPU multipliée, gain de rappel non mesuré. \\
+\addlinespace
+faiss-cpu & 1.15.1 & Recherche vectorielle exacte & \texttt{IndexFlatIP} : recherche exhaustive, donc reproductible et sans paramètre à régler sur un corpus de quelques centaines de blocs. & \texttt{IndexIVFFlat} -- nécessite un entraînement et perd en exactitude sans raison sur ce volume. \\
+\addlinespace
+NumPy / Torch CPU & 2.5.4 / 2.14.1\texttt{+cpu} & Agrégat, normalisation, plongées & Torch CPU déjà requis par le Module 1 ; le module force \texttt{device="cpu"} et n'importe Torch qu'à la première ingestion. & CUDA -- indisponible sur cette machine, et concurrentiel avec le Module 1. \\
+\addlinespace
+Angular & 20.3.34 (déclaré \texttt{\^{}20.0.0}) & Interface du module & Cadre du Module 1 ; la page est un composant autonome, sans dépendance au code du Module 1. & -- \\
+\addlinespace
+TypeScript & 5.8.3 (déclaré \texttt{\textasciitilde{}5.8.2}) & Typage du client & Suit la contrainte du dépôt ; les contrats du backend sont transcrits en interfaces locales. & -- \\
+\addlinespace
+RxJS & 7.8.2 & File d'attente des évaluations & \texttt{concatMap} suffit à sérialiser un appel concurrent sans thread ni file serveur. & \texttt{async/await} -- aurait couplé l'ordre des analyses au cycle de vie du composant. \\
+\addlinespace
+pytest & 9.1.1 & Tests unitaires et d'intégration & Déclaré \texttt{>=8} ; 201 tests recueillis, dont §\ref{sec:tests}. & -- \\
+\addlinespace
+Playwright & 1.64.1 & Scénario de bout en bout réel & Outil hors dépôt (§\ref{sec:stack-ecarts}) : navigateur Chromium réel, réseau observable, captures d'écran. & \texttt{requests} seul -- n'aurait pas testé la file, ni les en-têtes, ni le rendu. \\
+\end{longtable}
+\end{small}
+
+\subsection{Écarts entre fichiers de dépendances et environnement réel}
+\label{sec:stack-ecarts}
+
+Trois écarts, relevés en comparant les fichiers et \texttt{pip freeze}, sont
+signalés plutôt que masqués :
+
+\begin{enumerate}[label=\arabic*.*,leftmargin=*,itemsep=2pt]
+  \item \texttt{uvicorn} est épinglé \texttt{==0.34.2} dans
+        \file{requirement.txt} mais la version installée est
+        \texttt{0.54.0}. Le Module 3 n'a pas touché à cette épingle ; il
+        fonctionne avec les deux.
+  \item \texttt{pydantic} (2.14.1), \texttt{PyJWT} (2.10.1), \texttt{numpy}
+        (2.5.4) et \texttt{httpx} (0.28.1) ne sont pas épinglés par le dépôt :
+        ce sont des dépendances transitives. Le fichier
+        \file{requirements\_interview\_adam.txt} ne les re-épingle
+        volontairement pas (deux versions d'un même paquet dans un seul
+        environnement cassent la génération de CV).
+  \item \texttt{sentence\_transformers} n'est pas installé : le module calcule
+        lui-même l'agrégat et la normalisation avec
+        \texttt{transformers}~+~\texttt{torch} (§\ref{sec:rag-embed}).
+        \texttt{peft} est épinglé \texttt{0.17.1} dans \file{requirement.txt}
+        (Module 1) mais non installé ici.
+\end{enumerate}
+
+Les outils de test et de développement (pytest, httpx hors dépôt, Playwright
+\texttt{1.64.1}, tectonic) sont installés \textbf{hors du dépôt}, dans
+\file{C:/\brk{}Users/\brk{}lenovo/\brk} ; rien n'entre dans \file{requirement.txt} qui ne soit
+requis à l'exécution. Le navigateur utilisé par Playwright est Chromium
+\texttt{1248}, sous \file{AppData/\brk{}Local/\brk{}ms-\brk{}playwright}.
+
+\subsection{Ce que le module n'introduit pas}
+
+Aucune bibliothèque d'inférence, aucun serveur d'application, aucune base
+additionnelle, aucun paquet npm : les seize lignes d'\file{package.json} du
+frontend sont inchangées, et le Module 3 n'ajoute qu'un sous-répertoire
+\file{src/\brk{}app/\brk{}interview-\brk{}adam/\brk}. Le coût d'entrée dans le projet est donc
+limité à \texttt{faiss-cpu} et, pour les tests, à \texttt{pytest} et
+\texttt{httpx}.

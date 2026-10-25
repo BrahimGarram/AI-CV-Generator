@@ -1,0 +1,363 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Ingénierie des prompts}
+\label{sec:prompts}
+
+C'est le cœur du module : aucun fine-tuning n'étant conduit ici (le Module 3
+utilise le modèle tel que quantifié), toute la qualité de sortie provient des
+prompts et du pipeline qui les entoure. Quatre prompts sont produits par du
+code : trois prompts métier (\texttt{adam\_questions}, \texttt{adam\_evaluate},
+\texttt{adam\_improve}) et un prompt de réparation (\texttt{repair}).
+
+\subsection{Principes de conception}
+
+\begin{enumerate}[label=\textbf{P\arabic*.},leftmargin=3.4em,itemsep=3pt]
+  \item \textbf{Une seule sortie : du JSON.} Chaque prompt se termine par un
+        contrat de format explicite (\texttt{FORMAT : renvoie exactement \{...\}})
+        et par le rappel \texttt{FORMAT\_REMINDER}. La grammaire
+        \texttt{format=} d'Ollama est une aide, jamais une garantie
+        (§\ref{sec:modele-format}).
+  \item \textbf{Barème à ancres.} Un 7\,Md sans échelle de référence note tout
+        entre 7 et 8 : le prompt d'évaluation définit cinq paliers de 0 à 10
+        avec, pour chacun, ce qui le caractérise, et quatre critères
+        indépendants.
+  \item \textbf{Les données entre chevrons ne sont pas des instructions.} Tout
+        contenu externe (offre, CV, réponse du candidat, bloc RAG) est enveloppé
+        dans \verb|<label>…</label>| et une clause interdite au modèle d'en
+        exécuter le contenu (P3 de §\ref{sec:sec-inject}).
+  \item \textbf{Interdiction d'inventer, avec alternative matérialisée.} Là où
+        l'information manque, le module demande un marqueur
+        \verb|[à compléter : …]| plutôt qu'un remplissage : une réponse de
+        30~mots balisée est un succès, une histoire inventée de 120~mots est une
+        faute.
+  \item \textbf{Langue de sortie découplée de la langue des ressources.} La base
+        documentaire RAG est en anglais ; une clause impose la langue demandée
+        « même si un document de référence fourni est rédigé dans une autre
+        langue » (§\ref{sec:prompts-problemes}, problème~2).
+  \item \textbf{L'exemple ne fournit que la forme.} Les blocs few-shot sont
+        marqués comme squelettes et une liste de leurs mots-signatures est
+        explicitement interdite en sortie.
+  \item \textbf{Budget de prompt borné, rognage ordonné.} Les sections portent
+        un poids ; au-delà du budget, les plus faibles sont rognées en premier
+        (\texttt{base\_adam.fit}, §\ref{sec:prompts-assembleur}).
+\end{enumerate}
+
+\subsection{Un assembleur commun}
+\label{sec:prompts-assembleur}
+
+\file{prompts/\brk{}base\_adam.py} centralise quatre constantes et quatre fonctions.
+Les constantes, reproduites verbatim (elles constituent la partie commune des
+trois \texttt{SYSTEM}) :
+
+\medskip
+\noindent\textbf{\texttt{SYSTEM\_HEADER}} (674~car.) --- rôle, contrat JSON,
+interdiction d'inventer, consigne de langue.
+\input{\adamroot sections/lst-base-system_header}
+
+\smallskip
+\noindent\textbf{\texttt{IGNORE\_INJECTED}} (238~car.) --- clause anti-injection
+apposée à tout \texttt{SYSTEM} par \texttt{compose()}.
+\input{\adamroot sections/lst-base-ignore_injected}
+
+\smallskip
+\noindent\textbf{\texttt{JSON\_GUARDRAIL}} (198~car.) --- n'est utilisé que dans
+le prompt de réparation, via \texttt{schema\_contract()}.
+\input{\adamroot sections/lst-base-json_guardrail}
+
+\smallskip
+\noindent\textbf{\texttt{FORMAT\_REMINDER}} (67~car.) --- rappel final du prompt
+normal.
+\input{\adamroot sections/lst-base-format_reminder}
+
+Trois mécaniques complètent l'assemblage.
+
+\begin{itemize}[itemsep=2pt]
+  \item \texttt{block(label, text, limit)} : \texttt{clip} (borne en
+        caractères) $\to$ \texttt{scrub\_text} (suppression e-mail, téléphone,
+        URL) $\to$ \texttt{wrap\_content} (neutralisation d'un gabarit
+        étranger) $\to$ enveloppe \verb|<label>|. Les prompts sont donc sûrs
+        \emph{par construction} ; le contrôle du client
+        (\texttt{assert\_anonymized}) n'est qu'un garde-fou contre une
+        régression (§\ref{sec:sec-pii}).
+  \item \texttt{fit(sections, budget)} : rogne les sections de plus faible
+        poids jusqu'à tenir dans le budget. Budgets effectifs, calculés depuis
+        \file{config\_adam.py} : 8500~car. pour les questions, 8900 pour
+        l'évaluation, 14\,100 pour l'amélioration.
+  \item \texttt{compose(system, user, schema)} : assemble
+        \verb|[INST] <<SYS>> … <</SYS>> …  [/INST]| \emph{sans} recopier le
+        schéma en texte (il voyage dans \texttt{format=}) --- décision prise
+        pour la taille, cf. tableau~\ref{tab:taille-prompts}.
+\end{itemize}
+
+Une lecture attentive des listings de cette section demande deux conventions :
+les fragments sont extraits du \emph{code source}, donc les reprises de ligne
+avec guillemets adjacents sont la concaténation implicite de chaînes Python, et
+\verb|{{ }}| est l'échappement d'une f-string --- le modèle reçoit
+\verb|{ }|.
+
+\subsection{Prompt n°1 --- génération des questions}
+\label{sec:prompt-questions}
+
+\textbf{But.} Produire exactement $n$ questions pertinentes pour \emph{ce}
+poste, chacune accompagnée de son barème privé (\texttt{expected\_points},
+2 à 4 éléments attendus) qui servira à l'évaluation.
+
+\textbf{Entrées.} \texttt{job\_title}, \texttt{seniority},
+\texttt{question\_type}, \texttt{n\_questions}, \texttt{language} ; optionnels
+\texttt{company}, \texttt{job\_description}, \texttt{cv\_digest\_text},
+\texttt{gaps} (écarts offre/profil calculés sans LLM), \texttt{rag\_context}.
+
+\textbf{Ordre des sections} (poids décroissant, §\ref{sec:prompts-assembleur}) :
+TÂCHE avec la répartition catégorielle calculée \textbf{(100)} --- poste visé
+\textbf{(80)} --- profil anonymisé ou mention « aucun CV » \textbf{(30)} ---
+manques \textbf{(20)} / compétences déjà visibles \textbf{(10)} --- références
+RAG \textbf{(15)} --- consigne de langue \textbf{(90)} --- exemple
+\textbf{(60)}.
+
+Le calcul de la répartition mérite une ligne : \texttt{min\_majority =
+(2n + 2) // 3}, soit $\lceil 2n/3 \rceil$. Pour $n=3$, le prompt exige
+« 2 questions au minimum sur 3 en catégorie technical ». Sans cette arithmétique
+le modèle alternait librement et une demande « technique » produisait
+fréquemment trois questions comportementales.
+
+\textbf{\texttt{SYSTEM} du prompt de questions, verbatim :}
+\input{\adamroot sections/lst-questions-system}
+
+\textbf{Bloc few-shot, verbatim :}
+\input{\adamroot sections/lst-questions-example}
+
+\textbf{Schéma JSON attendu} (\texttt{QUESTION\_SET\_Schema}, transmis en
+\texttt{format=} ; un élément \texttt{questions} porte \texttt{question},
+\texttt{category} dans \{\texttt{technical}, \texttt{project}, \texttt{hr}\},
+\texttt{focus}, \texttt{expected\_points}) :
+\input{\adamroot sections/lst-schema-question-set}
+
+\textbf{Justification des choix.} « une question = une seule chose, 40 mots
+max, à la 2\textsuperscript{e} personne » corrige des questions fleuves de trois
+sous-questions. \texttt{expected\_points} est demandé ici plutôt qu'à
+l'évaluation pour que le barème soit fixé \emph{avant} de voir la réponse ---
+sinon le modèle ajuste le barème à la réponse et la note devient circulaire.
+L'exemple est en français même pour une séance anglaise : c'est un choix
+assumé (P5), la consigne de langue se chargeant de la traduction, ce qui évite
+d'exemple en double et ~780~caractères de prompt.
+
+\subsection{Prompt n°2 --- évaluation d'une réponse}
+\label{sec:prompt-evaluate}
+
+\textbf{But.} Noter une réponse sur 10 avec quatre critères séparés, un
+verdict formatif, et un diagnostic de \emph{type} d'échec.
+
+\textbf{Entrées.} \texttt{question}, \texttt{category}, \texttt{expected\_points}
+(repris du prompt 1, tronqué à~6), \texttt{answer} (borné à
+\texttt{MAX\_ANSWER\_CHARS}=4000), \texttt{language}, \texttt{job\_title},
+\texttt{seniority}, \texttt{rubric\_context} (RAG).
+
+Deux décisions structurelles : la question et sa catégorie sont rappelées dans
+le prompt (le module n'a pas de mémoire de conversation, §\ref{sec:modele-raw}) ;
+le barème du recruteur est injecté comme « éléments attendus », ce qui abaisse
+fortement la variance des notes.
+
+\textbf{\texttt{SYSTEM} du prompt d'évaluation, verbatim :}
+\input{\adamroot sections/lst-evaluate-system}
+
+\textbf{Bloc few-shot, verbatim :}
+\input{\adamroot sections/lst-evaluate-example}
+
+\textbf{Schéma JSON attendu} (score 0--10 décimal, quatre critères indépendants,
+forces et faiblesses en tableaux de chaînes, verdict libre) :
+\input{\adamroot sections/lst-schema-evaluation}
+
+\textbf{Justification.} Le barème à cinq paliers et les quatre critères
+indépendants viennent d'un constat : sans ancres, le modèle concentre ses notes
+entre 7 et 8 (quantifié en §\ref{sec:tests-calibration}, où l'écart entre une
+mauvaise et une bonne réponse passe à 4,0 points après réglage).
+L'interdiction « juge uniquement ce qui est écrit » répond au même problème sous
+un autre angle : sans elle le modèle créditait des compétences absentes de la
+réponse parce que le CV les mentionnait.
+
+\subsection{Prompt n°3 --- réponse améliorée}
+\label{sec:prompt-improve}
+
+\textbf{But.} Fournir un \emph{modèle} de réponse que le candidat réécrit avec
+ses vrais faits : structure STAR pour le comportemental, démonstration de
+raisonnement pour le technique, plus 2--3 conseils pour l'oral.
+
+\textbf{Entrées.} \texttt{question}, \texttt{category}, \texttt{answer},
+\texttt{language}, \texttt{evaluation} (score, critères faibles, jusqu'à 4
+lacunes), \texttt{cv\_digest\_text}, \texttt{job\_title}, \texttt{seniority},
+\texttt{technique\_notes} (RAG). Les lacunes de l'évaluation sont injectées en
+« points à corriger en priorité » : l'amélioration est appelée sur demande, après
+évaluation, et s'appuie sur son diagnostic.
+
+\textbf{\texttt{SYSTEM} du prompt d'amélioration, verbatim :}
+\input{\adamroot sections/lst-improve-system}
+
+\textbf{Bloc few-shot, verbatim :}
+\input{\adamroot sections/lst-improve-example}
+
+\textbf{Schéma JSON attendu} :
+\input{\adamroot sections/lst-schema-improvement}
+
+\textbf{Justification.} La clause « reste sur le SUJET et la MÊME situation » a
+été ajoutée après observation d'une dérive narrative (question sur la
+conteneurisation réécrite en anecdote de débogage de logs). L'encadrement de
+longueur (80--120 mots \emph{seulement si} la matière existe) tient à la
+latence : en CPU, ce prompt produit environ 4 tokens/s et une réponse de
+200~mots double le temps d'attente pour aucun gain pédagogique (§
+\ref{sec:perf-latence}).
+
+\subsection{Prompt de réparation}
+\label{sec:prompt-repair}
+
+Déclenché quand la première sortie est rejetée (parse JSON ou Pydantic). Il
+n'y a \textbf{qu'une} tentative de réparation, puis repli
+(§\ref{sec:prompts-validation}).
+
+Sa particularité : c'est le seul endroit où le schéma JSON est recopié en
+toutes lettres, parce que le but est précisément de montrer la forme attendue.
+\texttt{build()} reçoit le prompt d'origine, la sortie fautive (bornée à
+1600~car.) et le motif de rejet (borné à 400~car.). Comme \texttt{raw=true}
+ignore la mémoire de contexte, la réparation est présentée comme un second tour
+de conversation : le \texttt{[/INST]} d'origine est refermé, puis une nouvelle
+requête d'ouverture est ajoutée --- le texte d'en-tête est reproduit verbatim :
+\input{\adamroot sections/lst-repair-repair_header}
+
+Sur l'exemple de calibration, le prompt de réparation ainsi obtenu mesure
+5539~caractères. Il n'a \textbf{jamais été exécuté en conditions réelles} : les
+10 appels de la calibration et les 14 appels du parcours Playwright ont tous
+été valides dès le premier essai (§\ref{sec:tests-calibration}) --- le chemin
+est couvert par 21 tests unitaires à client simulé, pas par la production.
+
+\subsection{Problèmes rencontrés et corrections}
+\label{sec:prompts-problemes}
+
+Six défauts ont été observés, corrigés, puis revérifiés. Pour chacun, la
+columnne « preuve » renvoie au texte présent dans le code.
+
+\begin{small}
+\begin{longtable}{@{}>{\cellflush}p{2.5cm}
+                  >{\cellflush}p{4.3cm}
+                  >{\cellflush}p{4.4cm}
+                  >{\cellflush}p{3.4cm}@{}}
+\toprule
+\textbf{Défaut} & \textbf{Observé} & \textbf{Correction} & \textbf{Preuve dans le code} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Défaut 1 --- fuite de l'exemple & La réponse améliorée d'une question Docker parlait d'« inscriptions », de « pool de connexions » et de « taux d'échec » : des éléments de l'exemple few-shot. & L'exemple est devenu un squelette marqué « EXEMPLE DE FORMAT UNIQUEMENT --- aucun contenu réel à recopier », et une règle INTERDIT nommément ses mots-signatures sauf s'ils figurent dans la réponse du candidat. & \file{adam\_improve.py}:33--35 et \texttt{EXAMPLE}:53 \\
+\addlinespace
+Défaut 2 --- anglais dans une sortie française & Sur une séance en français, les \texttt{strengths}/\texttt{weaknesses} arrivaient en anglais dès qu'un bloc RAG était injecté : la base documentaire est anglaise et le modèle alignait sa langue dessus. & Clause dans \texttt{SYSTEM\_HEADER} : « Rédige TOUTES les valeurs de texte \ldots{} dans la langue demandée, même si un document de référence fourni est rédigé dans une autre langue », complétée par \texttt{language\_instruction()} et, côté évaluation, « ne recopie aucun document de référence ». & \file{base\_adam.py}:36--38, 74--82 \\
+\addlinespace
+Défaut 3 --- résultats inventés & Une amélioration concluait par « 35\,\% de temps de réponse en moins » alors que la réponse du candidat ne contenait aucun chiffre. & Interdiction formelle d'ajouter un fait (entreprise, techno, chiffre, durée, résultat) absent de la réponse ou du profil, et interdiction de conclure sur un résultat inventé ; le manquement devient un marqueur \verb|[à compléter : …]|. & \file{adam\_improve.py}:27--32 \\
+\addlinespace
+Défaut 4 --- hors-sujet confondu avec lacune & Une réponse juste mais à côté se voyait reprocher un manque de connaissances techniques ; le conseil qui en découlait (« révisez le SQL ») était hors cible. & Le \texttt{SYSTEM} d'évaluation distingue nommément HORS SUJET (\texttt{relevance} basse, le reste peut être juste) et MANQUE DE CONNAISSANCES (\texttt{relevance} correcte, \texttt{technical\_accuracy} basse), avec interdiction explicite de les confondre ; le \texttt{verdict} doit dire lequel. & \file{adam\_evaluate.py}:37--42 \\
+\addlinespace
+Défaut 5 --- prompt trop volumineux & Le prompt de questions dépassait 8500~caractères : préfill lent en CPU et fenêtre de 8\,192~jetons occupée aux deux tiers. & Suppression du schéma en texte dans les prompts normaux (il reste dans \texttt{format=}), exemples réduits, consignes condensées, et rognage pondéré par \texttt{fit()}. Voir tableau~\ref{tab:taille-prompts}. & \file{base\_adam.py}:76--86, \texttt{compose()} \\
+\addlinespace
+Défaut 6 --- fuite d'identité par le titre du CV & Le titre d'une génération du Module 1 est un nom de fichier librement saisi ; il peut contenir le nom du candidat. Transmis au prompt, il exposait une identité dans le journal et dans les \texttt{rag\_sources}. & Le titre n'est plus jamais exposé au Module 3 : \texttt{get\_cv\_bundle()} ne le renvoie pas ; seule la fonction recherchée du profil (\texttt{target\_title}) est conservée. & \file{cv\_bridge.py}:57--61 (commentaire explicite) \\
+\end{longtable}
+\end{small}
+
+\subsection{Taille des prompts avant et après l'optimisation}
+\label{sec:prompts-taille}
+
+\begin{small}
+\begin{table}[H]
+\centering
+\caption{Caractères de prompt, avant la passe d'optimisation puis après
+(réduction entre crochets). Les tokens de prompt sont relevés dans les journaux
+du parcours live, sur les entrées réelles de la démonstration.}
+\label{tab:taille-prompts}
+\begin{tabular}{@{}l r r r r r@{}}
+\toprule
+\textbf{Étape} & \textbf{Avant} & \textbf{Après} & \textbf{Réduc.} & \textbf{Tok. prompt (live)} & \textbf{\texttt{num\_predict}} \\
+\midrule
+Questions   & 8\,520 & 6\,078 & $-28,7\,\%$ & 1\,797 & 630 ($n=3$) \\
+Évaluation  & 7\,478 & 5\,781 & $-22,7\,\%$ & 1\,792 & 420 \\
+Amélioration & 10\,524 & 6\,772 & $-35,7\,\%$ & 2\,029 & 520 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{small}
+
+Trois chiffres à ne pas confondre. (a)~Le tableau ci-dessus compare l'état
+\emph{initial} et l'état \emph{après} la passe d'optimisation, sur le contexte
+d'une séance réelle. (b)~Un même jeu de prompts, re-mesuré sur un jeu
+d'entrée de contrôle unique (offre Java/Angular de 213~car., CV synthétique de
+213~car., deux fragments RAG de 263~car.), donne aujourd'hui : questions
+4427~car. (système 1975, utilisateur 2452, 636~mots), évaluation 4812~car.
+(2957 / 1855, 694~mots), amélioration 5521~car. (3097 / 2424, 835~mots),
+réparation 5539~car. La différence avec (a) vient uniquement de la taille des
+entrées, l'entrée candidat étant bornée à 4000~car. (c)~Le budget de rognage
+(8500 / 8900 / 14\,100) n'est pas une taille atteinte : c'est le plafond au-delà
+duquel \texttt{fit()} coupe les sections de plus faible poids.
+
+\subsection{Pipeline de validation de la sortie}
+\label{sec:prompts-validation}
+
+\begin{enumerate}[label=\arabic*.,leftmargin=*,itemsep=2pt]
+  \item \textbf{Nettoyage de surface} (\texttt{\_clean\_text}) : retrait d'un
+        éventuel bloc \verb|<think>| et des fences Markdown.
+  \item \textbf{Analyse JSON tolérante} (\texttt{\_parse\_json}) : \texttt{json.loads}
+        direct ; en cas d'échec, nouvelle tentative sur la tranche entre le premier
+        \texttt{\{} et le dernier \texttt{\}} --- ce qui sauve une sortie encadrée
+        de texte. Un objet non dict est rejeté.
+  \item \textbf{Validation Pydantic} : \texttt{model\_validate\_json} sur le
+        schéma de l'étape. Les rejets typiques : score hors de \texttt{ge=0, le=10},
+        critère manquant, chaîne vide là où le schéma exige \texttt{min\_length}.
+  \item \textbf{Réparation} : \textbf{une seule} tentative, température 0,1, avec
+        le motif de rejet et le schéma en toutes lettres (§\ref{sec:prompt-repair}).
+  \item \textbf{Repli déterministe} : \texttt{fallbacks.py}. Questions --- pool de
+        questions génériques FR/EN par type ; Évaluation --- heuristique sur la
+        forme (longueur, première personne, connecteurs, absence de repère chiffré),
+        avec \texttt{score = None} ; Amélioration --- reformulation minimale.
+  \item \textbf{Normalisation} : \texttt{\_normalize\_questions} indexe, tronque
+        à la demande, complète à défaut les questions manquantes en les marquant
+        \texttt{degraded: true}. \textbf{Jamais plus} que le nombre demandé.
+\end{enumerate}
+
+\textbf{Ce que « degraded » veut dire.} Le champ \texttt{\_meta.degraded} est un
+\texttt{True}/\texttt{False} posé par \texttt{\_run}, et \texttt{reason} porte le
+motif de rejet (tronqué à 200~car.). \texttt{degraded = true} signifie que
+\textbf{la réponse affichée ne vient pas du modèle} : elle vient du repli. Le
+degré de dégradation est visible côté interface (bandeau et marqueur sur la
+carte) et le \texttt{score} vaut \texttt{None} dans le cas de l'heuristique ---
+un choix volontaire : une note inventée par une heuristique serait une
+contrefaçon. Une transport failure (Ollama injoignable, timeout, 429, 5xx) ne
+dégrade \textbf{pas} : elle remonte en erreur HTTP (§\ref{sec:sec-erreurs}) pour
+que l'utilisateur puisse réessayer, au lieu d'afficher un repli en silence.
+
+\subsection{Les trois contrats de sortie}
+\label{sec:prompts-schemas}
+
+Les schémas reproduits plus haut (\texttt{QUESTION\_SET\_SCHEMA},
+\texttt{EVALUATION\_SCHEMA}, \texttt{IMPROVEMENT\_SCHEMA}, fichiers
+\texttt{lst-schema-*.tex}) sont écrits à la main dans
+\file{schemas\_adam.py} et non générés depuis les modèles Pydantic, pour trois
+raisons consignées dans l'en-tête de ce fichier.
+
+\begin{enumerate}[label=\textbf{R\arabic*.},leftmargin=3.6em,itemsep=2pt]
+  \item \textbf{Aucun \texttt{\$ref} ni \texttt{\$defs}.} La sortie de
+        \texttt{model\_json\_schema()} de Pydantic v2 factorise les sous-objets par
+        référence ; le schéma est aplati ici parce que la contrainte de décodage
+        d'Ollama doit consommer un document autoportant.
+  \item \textbf{Ni \texttt{enum}, ni \texttt{minimum}/\texttt{maximum}.} La
+        grammaire de sortie ne les garantit pas et Mistral n'est pas listé parmi
+        les modèles à sortie structurée ; les imposer risquait un blocage de
+        décodage plutôt qu'une sortie valide. Les bornes sont donc
+        \emph{re-calées côté Python} : \texttt{\_coerce\_score} accepte un nombre,
+        une chaîne contenant un nombre (avec virgule) et \textbf{bornne à 0--10},
+        avec arrondi au dixième ; une valeur non récupérable ou booléenne donne
+        \texttt{None}. \texttt{ge=0, le=10} des modèles Pydantic reste la
+        validation finale.
+  \item \textbf{Forme courte.} Un schéma écrit à la main tient en 55~lignes là où
+        la sérialisation Pydantic ajoute \texttt{title}, \texttt{description} et
+        métadonnées --- du texte payé à chaque appel, alors que le même contrat est
+        déjà énoncé en clair dans le \texttt{SYSTEM}.
+\end{enumerate}
+
+Le contrat n'est donc \emph{pas} une ceinture et des bretelles redondantes : le
+\texttt{format} borne la \textbf{forme}, les validateurs Pydantic bornent la
+\textbf{valeur}, et le repli bornent la \textbf{disponibilité}. Ce découpage est
+ce qui permet d'afficher un score même quand le modèle n'a pas respecté
+l'échelle demandée --- sans jamais inventer de note (cas \texttt{score = None}).

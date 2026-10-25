@@ -1,0 +1,14 @@
+% Extrait verbatim de interview_adam/prompts/adam_evaluate.py (constante EXAMPLE).
+\begin{lstlisting}[style=adamprompt]
+EXEMPLE
+Question (technical, poste "Développeur Back-End Python junior") :
+"Comment optimises-tu une requête SQL lente ?"
+Réponse du candidat : "Je mets des index et j'utilise JOIN au lieu de plusieurs requêtes."
+
+Sortie attendue :
+{"score":4.5,
+ "criteria":{"relevance":7,"clarity":6,"structure":3,"technical_accuracy":4},
+ "strengths":["Deux pistes correctes et applicables (index, réduction des allers-retours)"],
+ "weaknesses":["Aucun diagnostic : la lenteur n'est jamais mesurée (EXPLAIN ANALYZE, plan d'exécution)","Pas d'exemple concret ni de structure problème (*$\rightarrow$*) action (*$\rightarrow$*) résultat"],
+ "verdict":"Réponse sur le sujet mais lacune de méthode : c'est un manque de connaissances, pas du hors-sujet. Un recruteur attend la démarche (*\textemdash*) mesurer avant d'optimiser, puis justifier (*\textemdash*) et un cas chiffré."}
+\end{lstlisting}

@@ -1,0 +1,194 @@
+% ===========================================================================
+% Author: Adam | Module: AI Job Interview Simulator
+% Project: SmartCareer AI, IA for Software Engineering 2026-2027
+%
+% Preambule commun au chapitre « Simulateur d'entretien ».
+%
+% Chargé (a) par main.tex pour la compilation autonome, (b) par le rapport
+% d'équipe avant \input{chapter-interview-adam}. Chaque paquet est protégé
+% par \@ifpackageloaded : un paquet déjà chargé ailleurs n'est pas rechargé,
+% ce qui évite les « Option clash for ... ».
+%
+% Convention de chemin — \adamroot désigne le dossier interview_adam/docs/report/
+% relativement au répertoire où l'on lance pdflatex :
+%   compilation autonome (depuis docs/report/)   : \adamroot = {}   (défini ici)
+%   rapport d'équipe     (depuis la racine)      : \adamroot = {interview_adam/docs/report/}
+% ===========================================================================
+
+\makeatletter
+
+\providecommand{\adamroot}{}
+
+% --- encodage et typographie francaise ------------------------------------
+% Le chapitre doit compiler avec pdflatex (Overleaf, rapport d'equipe) MAIS
+% aussi avec xelatex/lualatex : les paquets d'encodage ci-dessous sont
+% specifiques a pdfTeX et font double emploi avec la gestion unicode native
+% des autres moteurs. D'ou les garde-fous.
+\newif\ifadam@ptex
+\ifdefined\XeTeXversion\else\ifdefined\luatexversion\else\adam@ptextrue\fi\fi
+
+\ifadam@ptex
+  \@ifpackageloaded{inputenc}{}{\usepackage[utf8]{inputenc}}
+  \@ifpackageloaded{fontenc}{}{\usepackage[T1]{fontenc}}
+  \@ifpackageloaded{lmodern}{}{\usepackage{lmodern}}
+\fi
+\@ifpackageloaded{textcomp}{}{\usepackage{textcomp}}
+\@ifpackageloaded{babel}{}{\usepackage[french]{babel}}
+\@ifpackageloaded{microtype}{}{%
+  \usepackage{microtype}%
+  % L'expansion typographique de microtype n'existe qu'en pdfTeX.
+  \ifadam@ptex\microtypesetup{protrusion=true,expansion=true}\fi
+}
+
+% --- boîtes, tableaux, figures, maths -------------------------------------
+\@ifpackageloaded{graphicx}{}{\usepackage{graphicx}}
+\@ifpackageloaded{amsmath}{}{\usepackage{amsmath}}
+\@ifpackageloaded{amssymb}{}{\usepackage{amssymb}}
+\@ifpackageloaded{booktabs}{}{\usepackage{booktabs}}
+\@ifpackageloaded{array}{}{\usepackage{array}}
+\@ifpackageloaded{tabularx}{}{\usepackage{tabularx}}
+\@ifpackageloaded{longtable}{}{\usepackage{longtable}}
+\@ifpackageloaded{multirow}{}{\usepackage{multirow}}
+\@ifpackageloaded{xcolor}{}{\usepackage{xcolor}}
+\@ifpackageloaded{caption}{}{\usepackage[font=small,labelfont=bf,skip=4pt]{caption}}
+\@ifpackageloaded{float}{}{\usepackage{float}}
+\@ifpackageloaded{enumitem}{}{\usepackage{enumitem}}
+\@ifpackageloaded{needspace}{}{\usepackage{needspace}}
+
+% --- dessins --------------------------------------------------------------
+\@ifpackageloaded{tikz}{}{\usepackage{tikz}}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc,fit,backgrounds}
+
+% --- code et verbatim -----------------------------------------------------
+\@ifpackageloaded{listings}{}{\usepackage{listings}}
+
+% --- géométrie : seulement si le document ne l'a pas déjà fixée -----------
+\@ifpackageloaded{geometry}{}{\usepackage[a4paper,top=2.4cm,bottom=2.4cm,left=2.6cm,right=2.6cm]{geometry}}
+
+% --- caractères unicode hors T1 (utilisés dans les verbatims de prompts) --
+\@ifpackageloaded{newunicodechar}{}{\usepackage{newunicodechar}}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{←}{\ensuremath{\leftarrow}}
+\newunicodechar{≈}{\ensuremath{\approx}}
+\newunicodechar{≥}{\ensuremath{\ge}}
+\newunicodechar{≤}{\ensuremath{\le}}
+\newunicodechar{≠}{\ensuremath{\neq}}
+\newunicodechar{…}{\ldots}
+\newunicodechar{—}{\textemdash}
+\newunicodechar{–}{\textendash}
+\newunicodechar{°}{\textdegree}
+\newunicodechar{✓}{\ensuremath{\surd}}
+
+% --- hyperref en dernier --------------------------------------------------
+\@ifpackageloaded{hyperref}{}{\usepackage[hidelinks]{hyperref}}
+
+\makeatother
+
+% --- palette --------------------------------------------------------------
+\providecolor{adamInk}{HTML}{1F2933}
+\providecolor{adamAccent}{HTML}{8E1F3F}
+\providecolor{adamSoft}{HTML}{F4F1EE}
+\providecolor{adamKey}{HTML}{1A5FB4}
+\providecolor{adamStr}{HTML}{0B6E4F}
+\providecolor{adamCom}{HTML}{7A6A55}
+\providecolor{adamFrame}{HTML}{C9B8AE}
+
+% --- macros du chapitre ---------------------------------------------------
+% Cellule de tableau : alignee a gauche et autorisant la coupure des
+% identificateurs longs (un raggedright classique interdit toute césure, ce
+% qui fait deborder les colonnes etroites).
+\makeatletter
+\@ifundefined{cellflush}{%
+  \newcommand{\cellflush}{%
+    \raggedright\arraybackslash
+    \hyphenpenalty=50\relax
+    \exhyphenpenalty=100\relax}%
+}{}
+% Le tirete bas souligne devient un point de coupure : les noms
+% MAX_CONCURRENT_LLM_CALLS ou interview_adam/... tiennent dans les colonnes.
+\let\_\relax
+\DeclareRobustCommand{\_}{\textunderscore\allowbreak}
+\makeatother
+% Identificateur en police clavier, cassable apres chaque underscore : les
+% noms longs (MAX_CONCURRENT_LLM_CALLS, interview_adam/...) tiennent dans les
+% colonnes etroites des tableaux.
+\makeatletter
+\providecommand{\adamtt}[1]{{\def\_{\textunderscore\allowbreak}\ttfamily #1}}
+\makeatother
+\providecommand{\fig}[1]{\adamroot figures/#1}
+\providecommand{\file}[1]{\adamtt{#1}}
+\providecommand{\code}[1]{\adamtt{#1}}
+\providecommand{\const}[1]{\adamtt{#1}}
+\providecommand{\route}[1]{\adamtt{#1}}
+\providecommand{\var}[1]{\textit{#1}}
+\providecommand{\NM}{\textup{\textsc{non mesuré}}}
+\providecommand{\note}[1]{\textcolor{adamAccent}{#1}}
+% Capture d'ecran de demonstration : largeur plafonnee, hauteur plafonnee pour
+% que les captures verticales (defilement complet) tiennent sur une page.
+\providecommand{\shot}[1]{\includegraphics[%
+  width=0.98\textwidth,totalheight=0.66\textheight,keepaspectratio]{\fig{#1}}}
+
+% --- styles listings ------------------------------------------------------
+\lstdefinestyle{adambase}{%
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{adamKey}\bfseries,
+  commentstyle=\color{adamCom}\itshape,
+  stringstyle=\color{adamStr},
+  showstringspaces=false,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  breakautoindent=true,
+  postbreak=\mbox{\textcolor{adamAccent}{$\hookrightarrow$}\space},
+  tabsize=4,
+  frame=single,
+  rulecolor=\color{adamFrame},
+  backgroundcolor=\color{adamSoft},
+  framesep=4pt,
+  xleftmargin=6pt,
+  xrightmargin=4pt,
+  aboveskip=8pt,
+  belowskip=8pt,
+  numbers=none,
+  inputencoding=utf8,
+  escapeinside={(*}{*)}}
+
+\lstdefinestyle{adamprompt}{style=adambase}
+\lstdefinestyle{adamjson}{style=adambase, morekeywords={true,false,null}}
+\lstdefinestyle{adamcode}{style=adambase, language=Python}
+\lstdefinestyle{adamshell}{style=adambase}
+
+\lstset{style=adambase}
+
+% --- styles TikZ ----------------------------------------------------------
+\tikzset{
+  adambox/.style={draw=adamFrame, fill=white, rounded corners=2pt, align=center,
+                  font=\footnotesize\sffamily, inner sep=5pt, minimum width=2.6cm,
+                  text=adamInk, thick},
+  adamsvc/.style={adambox, fill=adamSoft, draw=adamAccent},
+  adamext/.style={adambox, dashed},
+  adamdb/.style={adambox, fill=white, rounded corners=6pt, minimum width=3cm},
+  adamflow/.style={->, thick, draw=adamInk, >=Stealth},
+  adamback/.style={->, thick, draw=adamAccent, >=Stealth, dashed},
+  lam/.style={font=\scriptsize\sffamily\itshape, text=adamCom},
+  ll/.style={draw=adamFrame, fill=adamSoft, rounded corners=2pt, align=center,
+             font=\scriptsize\sffamily, inner sep=4pt, text=adamInk, thick},
+  msg/.style={->, thick, draw=adamInk, >=Stealth},
+  rmsg/.style={->, thick, draw=adamAccent, >=Stealth, dashed},
+  lifeline/.style={dotted, draw=adamFrame, thick},
+  mlab/.style={font=\scriptsize\sffamily, text=adamInk, inner sep=2pt},
+}
+
+% --- tableaux -------------------------------------------------------------
+% Les colonnes de largeur fixe sont écrites en toutes lettres dans les tableaux
+% (>{\raggedright\arraybackslash}p{...}) : aucun \newcolumntype, donc aucune
+% collision possible avec le préambule du rapport d'équipe.
+\renewcommand{\arraystretch}{1.2}
+
+% --- tolérance de mise en page --------------------------------------------
+% Le chapitre est dense en identifiants longs (noms de fichiers, de constantes)
+% que la coupure automatique ne sait pas découper : on laisse TeX étirer la
+% ligne avant de déclarer un débordement, et on offre un point de coupure
+% supplémentaire (\brk) pour les tokens typographiques sans espace.
+\setlength{\emergencystretch}{3em}
+\providecommand{\brk}{\allowbreak}

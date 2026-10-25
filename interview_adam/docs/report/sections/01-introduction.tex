@@ -1,0 +1,90 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Introduction et contexte}
+
+SmartCareer AI est une plateforme d'aide à la recherche d'emploi construite en
+équipe pour le projet \emph{IA for Software Engineering} 2026-2027. Le
+Module~1, réalisé par un coéquipier, génère un CV au format \LaTeX{} à l'aide
+d'un petit modèle de langage finement réglé (Qwen3-0.6B + LoRA) servi
+localement. Le présent chapitre décrit le \textbf{Module~3 : le simulateur
+d'entretien} (\emph{AI Job Interview Simulator}), dont je suis l'unique auteur.
+
+\subsection{Problème}
+
+Un candidat qui dispose d'un CV correct échoue pourtant souvent à l'oral, parce
+que personne ne l'a fait répondre avant l'entretien. Les outils d'entraînement
+existants reposent presque tous sur une API hébergée : la préparation suppose
+donc de confier son CV, son parcours et ses réponses à un tiers. Or un CV est
+donnée personnelle au sens du RGPD, et le projet impose déjà un fonctionnement
+hors ligne.
+
+\subsection{Objectif}
+
+Le Module~3 propose un entraînement complet, \emph{entièrement local} :
+
+\begin{enumerate}[leftmargin=1.6em,itemsep=1pt,topsep=2pt]
+  \item générer des questions d'entretien adaptées à un poste décrit par
+        l'utilisateur, éventuellement adossées à un CV déjà produit par le
+        Module~1 ;
+  \item noter chaque réponse sur 10 selon quatre critères, avec forces,
+        faiblesses et verdict ;
+  \item proposer un \emph{modèle} de réponse améliorée, structurée en STAR pour
+        les questions comportementales ;
+  \item conserver l'historique des sessions et une synthèse de clôture.
+  \end{enumerate}
+
+Le module s'appuie sur trois leviers, sans aucun entraînement de modèle :
+l'ingénierie des prompts, un retrieval-augmented generation (RAG) local sur une
+base documentaire écrite pour le projet, et une chaîne de validation stricte de
+la sortie du modèle.
+
+\subsection{Contraintes de conception}
+
+Quatre contraintes ont cadré toutes les décisions techniques :
+
+\begin{description}[leftmargin=1.4em,itemsep=2pt,topsep=3pt,style=nextline]
+  \item[Coexistence matérielle.] Le Module~1 et le Module~3 partagent le même
+    serveur Ollama et la même carte graphique de 4\,096~Mio. Les deux modèles
+    ne tiennent pas ensemble sur le GPU : la gestion de la VRAM est une
+    fonctionnalité, pas un détail d'exploitation (section~\ref{sec:perf}).
+  \item[Non-régression du Module~1.] Le code du coéquipier n'a été touché
+    qu'aux endroits strictement nécessaires au branchement : deux lignes dans
+    \file{app/\brk{}api.py}, une route dans \file{app.routes.ts}, un lien dans
+    \file{workspace.html}, un bloc de variables dans \file{.env.example}
+    (section~\ref{sec:branchement}).
+  \item[Confidentialité par construction.] Aucune donnée personnelle brute
+    n'atteint le modèle, ni les journaux, ni la base (section~\ref{sec:securite}).
+  \item[Dégradation contrôlée.] Une panne de modèle, d'index vectoriel ou de
+    dépendance lourde ne doit jamais faire échouer un entretien : le module
+    retombe sur un repli déterministe explicitement marqué
+    \const{degraded} (section~\ref{sec:prompts-validation}).
+\end{description}
+
+\subsection{Contributions}
+
+Les livrables sont les suivants.
+
+\begin{itemize}[leftmargin=1.6em,itemsep=1pt,topsep=2pt]
+  \item un paquet backend autonome \file{interview\_adam/\brk} : 3\,951 lignes de
+        code de production et 2\,368 lignes de tests, soit 6\,319 lignes Python
+        au total (mesuré par \file{wc -l}) ;
+  \item une interface Angular de 2\,751 lignes (835 lignes TypeScript,
+        498 lignes de gabarits HTML, 1\,418 lignes de styles) ;
+  \item une base documentaire de 6 domaines, 1\,150 lignes de Markdown et
+        71\,495 octets, découpée en 72 fragments indexés ;
+  \item 201 tests pytest (200 passés, 1 sauté par défaut) et 12 scénarios
+        d'extrémité exécutés dans un navigateur réel ;
+  \item un jeu de mesures de latence et d'occupation mémoire, reproduisible
+        (section~\ref{sec:perf}).
+\end{itemize}
+
+\subsection{Plan}
+
+La section~2 formalise le cahier des charges. La section~3 présente
+l'architecture, du diagramme global aux schémas de séquence. La section~4
+justifie la pile technique. Les sections~5 à~7 détaillent les trois leviers :
+le modèle, les prompts, le RAG. La section~8 traite de sécurité et de
+confidentialité, la section~9 des performances mesurées, la section~10 des
+tests. La section~11 discute les limites assumées et les perspectives.
+Quatre annexes complètent le chapitre : méthode de développement assisté par
+IA (A), démonstration (B), environnement d'exécution (C) et contribution
+(D).

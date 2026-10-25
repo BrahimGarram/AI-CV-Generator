@@ -1,0 +1,12 @@
+% Extrait verbatim de interview_adam/prompts/adam_questions.py (constante EXAMPLE).
+\begin{lstlisting}[style=adamprompt]
+EXEMPLE (extrait)
+Contexte : poste "Développeur Back-End Python (junior)", offre mentionnant FastAPI et PostgreSQL,
+CV du candidat mentionnant Django et MySQL, manque signalé : fastapi.
+
+Sortie attendue :
+{"questions":[
+ {"question":"Qu'est-ce qui te semble différent entre une vue Django synchrone et une route FastAPI asynchrone ?","category":"technical","focus":"FastAPI, asynchrone","expected_points":["différence thread/process vs event loop","connaissance de asyncio","cas d'usage I/O"]},
+ {"question":"Dans ton projet Django, comment as-tu structuré tes modèles et géré les migrations ?","category":"project","focus":"modélisation, migrations","expected_points":["explique un choix de schéma","cite une migration précise","évoque un problème rencontré et sa résolution"]}
+]}
+\end{lstlisting}

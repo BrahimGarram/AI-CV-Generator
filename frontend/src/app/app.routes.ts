@@ -28,5 +28,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/workspace/workspace').then((m) => m.Workspace),
   },
+  {
+    path: 'interview',
+    title: "Simulateur d'entretien — CV Studio",
+    canActivate: [authGuard],
+    loadComponent: () => import('./interview-adam/adam-interview-page').then((m) => m.AdamInterviewPage),
+  },
   { path: '**', redirectTo: '' },
 ];

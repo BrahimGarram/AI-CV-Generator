@@ -1,0 +1,96 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Cahier des charges}
+
+\subsection{Exigences fonctionnelles}
+
+\begin{description}[leftmargin=1.4em,itemsep=3pt,topsep=3pt,style=nextline]
+  \item[F1 --- Génération de questions adaptées au poste.] L'utilisateur décrit
+    un poste (intitulé obligatoire, entreprise et description d'offre
+    facultatives), choisit un niveau parmi quatre (\const{junior},
+    \const{inter}, \const{senior}, \const{lead}), un type de questions
+    (\const{technical}, \const{hr}, \const{mixed}), un nombre de questions
+    entre 3 et 15 et une langue. Le module renvoie exactement ce nombre de
+    questions, chacune avec une catégorie, un axe (\const{focus}) et 2 à 4
+    \emph{éléments de réponse attendus} qui serviront de barème à
+    l'évaluation~(F2).
+  \item[F2 --- Évaluation notée sur 10.] Pour une réponse donnée, le module
+    renvoie une note globale décimale entre 0 et 10 et quatre critères
+    indépendants notés de la même façon : \emph{pertinence par rapport à la
+    question posée} (\const{relevance}), \emph{clarté} (\const{clarity}),
+    \emph{structure} (\const{structure}), \emph{justesse technique}
+    (\const{technical\_accuracy}). S'y ajoutent 1 à 4 forces, 1 à 4 faiblesses
+    citant un passage de la réponse, et un verdict de 2 à 3 phrases.
+    L'évaluation d'une réponse ne bloque pas la rédaction de la suivante : elle
+    est lancée en arrière-plan et séquencée (section~\ref{sec:seq}).
+  \item[F3 --- Réponse améliorée, à la demande.] Le bouton
+    «~Proposer une meilleure réponse~» n'est jamais appelé automatiquement :
+    chaque analyse coûte une génération. Le module renvoie une réponse réécrite,
+    décomposée en STAR (Situation, Tâche, Action, Résultat) pour le
+    comportemental et en démonstration de raisonnement pour le technique, plus
+    2 à 3 conseils actionnables pour l'oral.
+  \item[F4 --- Historique et synthèse.] Une session apparaît dans l'historique
+    de l'utilisateur avec son poste, sa date, son nombre de réponses analysées
+    et sa moyenne. Elle est consultable en lecture seule, et supprimable avec
+    confirmation ; la suppression est bornée au propriétaire. Quand toutes les
+    questions ont reçu une réponse, la session passe automatiquement à l'état
+    \const{finished} et une synthèse déterministe (moyenne, meilleure et moins
+    bonne question, conseils de clôture) est figée en base.
+  \item[F5 --- «~Utiliser mon CV~».] L'utilisateur peut adosser les questions à
+    un CV déjà généré par le Module~1, choisi dans une liste alimentée par
+    l'endpoint \route{GET /history} du Module~1. Le CV est alors lu, anonymisé,
+    condensé, et l'écart entre l'offre et le profil est calculé sans IA pour
+    orienter les questions.
+  \item[F6 --- Bilingue français / anglais.] La langue choisie s'applique aux
+    questions comme à tous les textes d'analyse.
+  \item[F7 --- Diagnostic.] Une route d'état indique, avant de lancer un
+    entretien, si le modèle est joignable et si l'index documentaire est chargé,
+    avec le nombre de fragments et le nom du modèle de plongement.
+  \item[F8 --- Libération de la VRAM.] La fin de page (rechargement, fermeture
+    d'onglet, navigation interne vers l'éditeur de CV) déclenche une libération
+    explicite du modèle pour rendre la carte au Module~1.
+\end{description}
+
+\subsection{Exigences non fonctionnelles}
+
+\begin{description}[leftmargin=1.4em,itemsep=3pt,topsep=3pt,style=nextline]
+  \item[N1 --- Confidentialité.] Aucune donnée personnelle brute n'est envoyée
+    au modèle, stockée dans une table du module ou écrite dans un journal.
+    Le CV est anonymisé avant toute utilisation ; les textes libres saisis sont
+    nettoyés des adresses électroniques, téléphones et URL.
+    Ce point est vérifié par des tests dédiés (section~\ref{sec:tests}).
+  \item[N2 --- Local et hors ligne.] Aucune API payante, aucun appel réseau
+    sortant autre que \route{localhost}. Le module fonctionne câble débranché,
+    une fois les poids du modèle et de l'embeddeur en cache local.
+  \item[N3 --- Robustesse.] Toute panne (modèle absent, Ollama injoignable,
+    timeout, quota, sortie non conforme) produit un message d'erreur français
+    actionnable et un code HTTP cohérent. Aucune route ne peut renvoyer un
+    500~nu avec une trace de pile.
+  \item[N4 --- Cible matérielle.] Un poste de développement ordinaire :
+    CPU grand public et GPU de 4~Go. Cette contrainte est structurante : elle
+    impose un quantization lourde, des prompts courts, une seule génération
+    simultanée et un repli CPU~pur configurable.
+  \item[N5 --- Latence.] Aucune exigence chiffrée n'avait été fixée au
+    démarrage ; la contrainte réelle est venue du matériel. Les mesures de la
+    section~\ref{sec:perf} servent de référence, et l'interface est conçue pour
+    une latence de plusieurs dizaines de secondes par appel.
+  \item[N6 --- Non-régression.] Le Module~1 ne doit subir aucune modification
+    fonctionnelle ; le branchement se limite aux quatre fichiers listés en
+    section~\ref{sec:branchement}.
+  \item[N7 --- Testabilité.] La suite de tests ne doit jamais dépendre
+    d'Ollama, d'un téléchargement de poids ni du réseau.
+\end{description}
+
+\subsection{Hors périmètre assumé}
+
+Trois points ont été explicitement écartés, et non oubliés :
+
+\begin{itemize}[leftmargin=1.6em,itemsep=1pt,topsep=2pt]
+  \item le \emph{streaming} token par token, pour des raisons de format de
+    sortie (section~\ref{sec:no-stream}) ;
+  \item le \emph{déploiement} : le module suppose un Ollama local, il n'a pas
+    été conteneurisé ni publié ;
+  \item l'\emph{adaptation à une offre stockée} : le dépôt du Module~1 ne
+    conserve aucune offre d'emploi. Le point de branchement est néanmoins en
+    place et documenté (\file{cv\_bridge.get\_job\_offer\_context},
+    section~\ref{sec:limites}).
+\end{itemize}

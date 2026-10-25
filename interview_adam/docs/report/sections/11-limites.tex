@@ -1,0 +1,111 @@
+% Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI
+\section{Limites assumées et perspectives}
+\label{sec:limites}
+
+Cette section ne cherche pas la formule de circonstance : chaque limite ci-dessous
+correspond à un fait observé, mesuré ou écrit dans le code.
+
+\subsection{Limites mesurées ou observées}
+
+\begin{enumerate}[label=\textbf{L\arabic*.},leftmargin=3.2em,itemsep=4pt]
+  \item \textbf{Latence incompatible avec une machine sans GPU.} En CPU pur, une
+        séance complète (3 questions, 2 évaluations, 1 amélioration) dépasse les
+        10~minutes --- 113,6 + 94,3 + 121,5~s par étape sur les mesures du
+        tableau~\ref{tab:etapes-cpu}, plus les appels d'évaluation supplémentaires.
+        Le cahier des charges visait un poste à 4~Gio de VRAM : le module y tient,
+        mais la démonstration n'est confortable que si le modèle est pré-chargé
+        et si le GPU n'est pas pris par le Module 1.
+  \item \textbf{Pas de streaming, donc pas de progression token par token.}
+        \texttt{stream=false} est délibéré (§\ref{sec:modele-raw}) : la sortie est
+        un JSON dont aucun préfixe n'est affichable. Le choix a été
+        \emph{explicitement reconsidéré} pendant le projet (une voie NDJSON à
+        travers route + service + client + Angular a été évaluée puis écartée) ;
+        le compromis retenu est une progression par états côté interface, avec
+        message temporisé. Conséquence user-visible : entre le clic et la carte,
+        l'utilisateur attend 19--120~s sans rien voir bouger.
+        \label{sec:no-stream}
+  \item \textbf{Libération de VRAM inefficace pendant une génération en vol.}
+        Constatée au parcours navigateur (§\ref{sec:perf-vram}) : la requête
+        \texttt{keep\_alive: 0} est acceptée mais le modèle reste chargé
+        jusqu'à la fin de la génération. Forcer l'annulation couperait une
+        réponse en cours de rédaction ; ce n'est pas fait.
+  \item \textbf{Contenu \texttt{raw=true} : pas de mémoire entre appels.}
+        Questions, évaluation et amélioration sont trois conversations
+        indépendantes. Impossible donc de demander « reformule ta question 2 en
+        plus court » ou de faire une séance de suivi cohérente ; chaque prompt
+        doit ré-expliquer le contexte, ce qui est aussi ce qui les rend longs.
+  \item \textbf{RAG aveugle au français hors glossaire.} Mesuré : une requête
+        absurde (« qqq www zzz ») marque 0,292 et une requête de plomberie
+        0,213 --- au-dessus du seuil de 0,20. Le corpus est anglais, les
+        25~termes du glossaire ne couvrent pas le vocabulaire des métiers hors
+        ingénierie (§\ref{sec:rag-limites}).
+  \item \textbf{Calibration du score non statistique.} Quatre appels réels
+        (§\ref{sec:tests-calibration}) sur une question, sans jeu d'or annoté.
+        Un biais de longueur est visible dans les données : la meilleure réponse
+        est aussi la plus longue, et rien dans le prompt n'interdit de noter la
+        longueur. La note affichée doit être lue comme un feedback formatif,
+        pas comme une mesure.
+  \item \textbf{\texttt{MIN\_QUESTIONS=3} appliqué silencieusement.} Demander 2
+        questions en produit 3, côté interface et côté schéma. Cohérent avec le
+        barème minimum, mais non expliqué à l'utilisateur.
+  \item \textbf{Troncature silencieuse des réponses longues.} 5000~caractères
+        envoyés à l'API répondent 200 avec rognage, pas 422
+        (§\ref{sec:sec-limites}). Choix assumé, mais un candidat qui écrit un
+        roman n'apprend pas que la fin n'a pas été lue.
+  \item \textbf{Aucune adaptation à une offre réelle stockée.} Le dépôt du
+        Module 1 ne contient aucune table ni colonne d'offre :
+        \texttt{get\_job\_offer\_context()} est un point de branchement documenté
+        qui renvoie \texttt{None}. L'offre doit être collée par l'utilisateur.
+  \item \textbf{Co-tenance GPU non testée en charge.} Le scénario « le Module 1
+        génère un CV pendant que le Module 3 évalue » n'a pas été mesuré
+        bout en bout avec les deux modèles chargés en même temps ; la
+        recommandation \texttt{num\_gpu=0} repose sur l'arithmétique de la
+        table~\ref{tab:numgpu}, pas sur une observation directe.
+  \item \textbf{Sécurité : dépendance aux mots-clés d'erreur.} La détection de
+        contention mémoire cherche \texttt{memory}/\texttt{cuda}/\texttt{oom}/\texttt{vram}
+        dans le message d'Ollama (§\ref{sec:sec-erreurs}) ; un changement de
+        libellé côté Ollama la rend muette.
+  \item \textbf{Persistance limitée à SQLite et au processus unique.} Connexion
+        par appel, \texttt{timeout=30} : aucune garantie sous plusieurs workers
+        uvicorn, et le module n'a pas été testé ainsi.
+\end{enumerate}
+
+\subsection{Perspectives}
+
+Par coût croissant, et en restant dans le projet d'équipe :
+
+\begin{enumerate}[label=\textbf{(\alph*)},leftmargin=*,itemsep=3pt]
+  \item \textbf{Signaler plutôt que rogner silencieusement} : une mention
+        « réponse tronquée à 4000~caractères » dans la carte d'évaluation, et la
+        même pour \texttt{MIN\_QUESTIONS}. Travail d'interface, aucune mesure
+        nouvelle nécessaire.
+  \item \textbf{Enrichir la base documentaire en français}, ou plonger les
+        fragments dans les deux langues : c'est la réponse directe à L5, et le
+        corpus étant écrit par le module, l'effort est éditorial.
+  \item \textbf{Jeu d'or annoté} : 20 à 30 paires (question, réponse) notées par
+        un recruteur, avec corrélation de Spearman entre le score du module et la
+        note humaine. Sans cela, la question « est-ce que ce barème note juste ? »
+        reste ouverte (L6). Le Module 3 est le seul des deux modules à pouvoir
+        produire cet instrument à coût nul pour le modèle.
+  \item \textbf{Test de co-tenance réel} (L10) : charger Qwen + LoRA et Mistral
+        simultanément, mesurer la VRAM et les échecs, puis fixer le défaut de
+        \texttt{num\_gpu} sur la mesure plutôt que sur le calcul.
+  \item \textbf{Traçabilité des assertions} : lier chaque \texttt{expected\_point}
+        et chaque \texttt{strength} au fragment RAG qui l'a inspiré, pour passer
+        d'une puce « Base documentaire » à une citation vérifiable.
+  \item \textbf{Fin de séance et séance de suivi} : une mémoire de séance (la
+        liste des questions déjà posées, les notes obtenues) est déjà en base ;
+        l'exposer dans le prompt permettrait une progression réaliste entre deux
+        simulations, ce que L4 interdit aujourd'hui.
+  \item \textbf{Adaptation à une offre} (L9) dès que le Module 1 stocke des
+        offres : le branchement \texttt{get\_job\_offer\_context} et l'analyse
+        d'écart \texttt{skill\_gaps} sont déjà écrits pour ça.
+  \item \textbf{Fine-tuning} : le Module 1 a montré la chaîne
+        dataset$\to$LoRA$\to$Ollama. Un jeu de paires (réponse faible, feedback,
+        réponse STAR) pourrait être généré par le module lui-même et utilisé pour
+        affiner le jugé --- mais cela suppose le jeu d'or de (c) pour ne pas
+        optimiser un biais.
+  \item \textbf{Déploiement} : aujourd'hui le module suppose Ollama et un venv
+        local. Une image conteneurisée avec le modèle pré-chargé supprimerait le
+        froid de 109~s (L1), au prix d'une distribution de 4~Go.
+\end{enumerate}

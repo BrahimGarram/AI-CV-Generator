@@ -1,0 +1,100 @@
+% ===========================================================================
+% Author: Adam | Module: AI Job Interview Simulator
+% Project: SmartCareer AI, IA for Software Engineering 2026-2027
+%
+% Rapport technique du Module 3 — compilation AUTONOME.
+%
+%   cd interview_adam/docs/report
+%   pdflatex main && pdflatex main          (deux passes : table des matières)
+%
+% Pour l'intégrer au rapport d'équipe, ne pas compiler ce fichier : voir
+% chapter-interview-adam.tex (en-tête du fichier pour les trois lignes à copier).
+% ===========================================================================
+
+\documentclass[11pt,a4paper]{article}
+
+% \adamroot est vide : on compile depuis le dossier du rapport.
+\newcommand{\adamroot}{}
+\input{report-preamble}
+
+\hypersetup{
+  pdftitle={Rapport technique --- Module 3 : AI Job Interview Simulator},
+  pdfauthor={Adam},
+  pdfsubject={SmartCareer AI --- IA for Software Engineering 2026-2027},
+  pdfkeywords={FastAPI, Ollama, Mistral-7B, RAG, FAISS, Angular, prompt engineering}}
+
+\title{%
+  \textcolor{adamAccent}{\rule{\linewidth}{1.2pt}}\\[6pt]
+  {\LARGE\bfseries Module 3 --- Simulateur d'entretien\\[4pt]
+   \emph{AI Job Interview Simulator}}\\[14pt]
+  {\large Rapport technique --- chapitre du rapport d'équipe SmartCareer AI}\\[10pt]
+  \textcolor{adamAccent}{\rule{\linewidth}{1.2pt}}}
+\author{Adam}
+\date{Projet : SmartCareer AI --- IA for Software Engineering 2026-2027\\
+      Rapport produit le 25 octobre 2026}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{center}
+  \small
+  \begin{tabular}{@{}>{\cellflush}p{5.2cm}
+                 >{\cellflush}p{9.6cm}@{}}
+    \toprule
+    \textbf{Périmètre} & Génération de questions, évaluation notée sur 10,
+    réponse améliorée STAR, historique, greffon RAG local \\
+    \textbf{Backend} & \file{interview\_adam/\brk} (FastAPI, 3\,951 lignes de code
+    de production, 2\,368 lignes de tests) \\
+    \textbf{Frontend} & \file{frontend/\brk{}src/\brk{}app/\brk{}interview-\brk{}adam/\brk} (Angular 20,
+    2\,751 lignes) \\
+    \textbf{Modèle} & \file{mistral:7b-\brk{}instruct-\brk{}v0.2-\brk{}q4\_K\_M} servi par Ollama
+    0.40.11, 4\,Go de VRAM \\
+    \textbf{Vérification} & 200 tests pytest passés, 1 sauté ; 12 scénarios
+    Playwright en navigateur réel \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\vspace{8pt}
+\begin{center}
+  \footnotesize\itshape
+  Tous les chiffres de ce rapport proviennent d'exécutions réelles sur le poste
+  de développement (benchmarks, journal d'exécution, base SQLite, runs
+  Playwright). Ce qui n'a pas été mesuré est explicitement marqué
+  «~\upshape\textsc{non mesuré}~».
+\end{center}
+
+\clearpage
+\tableofcontents
+\clearpage
+
+\input{chapter-interview-adam}
+
+\clearpage
+\listoffigures
+\listoftables
+
+\clearpage
+\begingroup
+\renewcommand{\bibname}{Références}
+\begin{thebibliography}{9}\small
+\bibitem{ollama-doc} Ollama, \emph{Documentation de l'API} --- endpoints
+  \route{/\brk{}api/\brk{}generate}, \route{/\brk{}api/\brk{}chat}, \route{/\brk{}api/\brk{}tags}, \route{/\brk{}api/\brk{}ps},
+  options \var{raw}, \var{format}, \var{keep\_alive}, \var{num\_gpu},
+  \var{num\_ctx}, \var{num\_predict}. \url{https://github.com/ollama/ollama/blob/main/docs/api.md}
+\bibitem{mistral-card} Mistral AI, \emph{Mistral 7B} (carte de modèle,
+  licence Apache~2.0). \url{https://huggingface.co/mistralai/Mistral-7B-v0.2}
+\bibitem{reimers2019sbert} Reimers \& Gurevych, \emph{Sentence-BERT}, EMNLP 2019 ---
+  modèle \file{all-\brk{}MiniLM-\brk{}L6-\brk{}v2} (384 dimensions, 512 tokens max).
+\bibitem{johnson2019faiss} Johnson, Douze \& Jégou, \emph{Billion-scale similarity search
+  with GPUs}, arXiv:1702.08734 --- index \file{IndexFlatIP}.
+\bibitem{star} Carroll, \emph{The STAR Interview Method} --- structure
+  Situation / Tâche / Action / Résultat, utilisée comme gabarit de réponse.
+\bibitem{owasp-top10} OWASP, \emph{Top~10 for LLM Applications} ---
+  LLM01 \emph{Prompt Injection}, LLM06 \emph{Sensitive Information Disclosure}.
+\end{thebibliography}
+\endgroup
+
+\end{document}

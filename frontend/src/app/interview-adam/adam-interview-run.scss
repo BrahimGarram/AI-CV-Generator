@@ -1,0 +1,618 @@
+/* Author: Adam | Module: AI Job Interview Simulator | Project: SmartCareer AI, IA for Software Engineering 2026-2027 */
+
+:host {
+  display: block;
+}
+
+.run {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.run-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.run-ctx {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 15px;
+
+  strong {
+    font-size: 17px;
+  }
+
+  span:not(.chip) {
+    color: var(--text-muted);
+  }
+}
+
+.chip {
+  background: var(--surface-3);
+  color: var(--text-soft);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+
+  &.ok {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+}
+
+.run-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .bar {
+    flex: 1;
+    height: 7px;
+    background: var(--surface-3);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .fill {
+    height: 100%;
+    background: var(--gradient);
+    transition: width 0.4s ease;
+  }
+
+  .ratio {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+}
+
+.run-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.banner.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+}
+
+/* ===================== Carte question ===================== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.q-index {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.q-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.cat {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.focus {
+  color: var(--text-muted);
+}
+
+.question {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.points {
+  font-size: 13px;
+  color: var(--text-soft);
+
+  summary {
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+  }
+}
+
+textarea {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 88px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ===================== Boutons ===================== */
+.btn-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 11px;
+  background: var(--gradient);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14.5px;
+  padding: 10px 18px;
+  cursor: pointer;
+  transition: transform 0.12s, filter 0.12s;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.05);
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.btn-soft {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 11px;
+  font-weight: 600;
+  padding: 9px 15px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    filter: brightness(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-soft);
+  border-radius: 11px;
+  padding: 9px 15px;
+  font-size: 14px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.sm {
+  font-size: 13.5px;
+  padding: 8px 13px;
+}
+
+.link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+
+  /* En attente : la demande n'est pas encore partie, les points restent figés. */
+  &.queued .dots i {
+    animation-play-state: paused;
+    opacity: 0.45;
+  }
+}
+
+.answer-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.inline-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+/* ===================== Évaluation ===================== */
+.eval {
+  border-top: 1px dashed var(--border);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eval-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.score {
+  font-size: 24px;
+  font-weight: 800;
+  min-width: 66px;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+
+  &.good {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  &.mid {
+    background: #fff4e0;
+    color: #b8791b;
+  }
+
+  &.bad {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+}
+
+.eval-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+
+  .tag {
+    align-self: flex-start;
+    font-size: 11.5px;
+    background: var(--surface-3);
+    color: var(--text-muted);
+    border-radius: 6px;
+    padding: 2px 8px;
+
+    &.warn {
+      background: #fff4e0;
+      color: #b8791b;
+    }
+
+    &.ok {
+      background: var(--success-soft);
+      color: var(--success);
+    }
+  }
+}
+
+.criteria {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+
+  li b {
+    color: var(--text-soft);
+    margin-left: 4px;
+  }
+}
+
+.sw {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
+
+  .col {
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+
+    strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12.5px;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 16px;
+    }
+
+    &.good strong {
+      color: var(--success);
+    }
+
+    &.bad strong {
+      color: var(--danger);
+    }
+  }
+}
+
+/* ===================== Réponse améliorée ===================== */
+.improve-zone {
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.improved {
+  background: var(--accent-soft);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.improved-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.star {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
+
+  div {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+
+    b {
+      display: block;
+      color: var(--accent);
+      margin-bottom: 3px;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+  }
+}
+
+.improved-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.tips {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+/* ===================== Synthèse ===================== */
+.cta {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+.synthesis {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+
+  h3 {
+    margin: 0;
+    font-size: 19px;
+  }
+}
+
+.syn-score {
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 14px 22px;
+  border-radius: 16px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+
+  &.good {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  &.mid {
+    background: #fff4e0;
+    color: #b8791b;
+  }
+
+  &.bad {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+}
+
+.syn-sub {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pill {
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+
+  &.good {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  &.bad {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+}
+
+.advice {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  li {
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13.5px;
+    color: var(--text-soft);
+    text-align: left;
+  }
+}
+
+.syn-actions {
+  margin-top: 6px;
+}
+
+.run-foot {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+/* Indicateur d'attente. */
+.dots {
+  display: inline-flex;
+  gap: 4px;
+
+  i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: bob 1s infinite ease-in-out;
+  }
+
+  i:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+
+  i:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+}
+
+@keyframes bob {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
