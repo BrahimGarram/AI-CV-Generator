@@ -1,0 +1,102 @@
+/* ===================== Thème ===================== */
+:root {
+  --bg: #f5f6fb;
+  --surface: #ffffff;
+  --surface-2: #f3f4f8;
+  --surface-3: #e9ebf2;
+  --border: #e4e6ee;
+  --text: #141726;
+  --text-soft: #3b4157;
+  --text-muted: #727892;
+
+  /* Palette « Bordeaux Chic » */
+  --accent: #9f1239;
+  --accent-strong: #881337;
+  --accent-soft: #fff1f2;
+  --gradient: linear-gradient(135deg, #881337 0%, #be123c 55%, #e11d48 100%);
+  --success: #12a06b;
+  --success-soft: #e3f6ee;
+  --danger: #d63b52;
+  --danger-soft: #fdecef;
+
+  --code-bg: #12141f;
+  --code-bg-2: #1a1d2b;
+  --code-text: #e2e5f1;
+  --code-muted: #8a90a8;
+
+  --radius: 14px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 1px 2px rgba(20, 23, 38, 0.04), 0 4px 16px -6px rgba(20, 23, 38, 0.08);
+  --shadow-md: 0 2px 6px rgba(20, 23, 38, 0.05), 0 18px 40px -16px rgba(20, 23, 38, 0.18);
+
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c0e16;
+    --surface: #141724;
+    --surface-2: #1b1f2f;
+    --surface-3: #242939;
+    --border: #262b3c;
+    --text: #eef0f8;
+    --text-soft: #c4c8da;
+    --text-muted: #8c92aa;
+
+    --accent: #fb7185;
+    --accent-strong: #fda4af;
+    --accent-soft: rgba(251, 113, 133, 0.13);
+    --success: #3ccf95;
+    --success-soft: rgba(60, 207, 149, 0.12);
+    --danger: #ff6b81;
+    --danger-soft: rgba(255, 107, 129, 0.12);
+
+    --code-bg: #0a0b12;
+    --code-bg-2: #11131d;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px -6px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 18px 40px -16px rgba(0, 0, 0, 0.7);
+
+    color-scheme: dark;
+  }
+}
+
+/* ===================== Base ===================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-3) transparent;
+}

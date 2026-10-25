@@ -1,0 +1,138 @@
+<div class="page">
+  <!-- ===================== Navigation ===================== -->
+  <header class="nav">
+    <a class="brand" routerLink="/">
+      <span class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      </span>
+      CV Studio
+    </a>
+    <nav class="nav-links">
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#etapes">Comment ça marche</a>
+    </nav>
+    <div class="nav-actions">
+      @if (auth.isLoggedIn()) {
+        <a class="btn primary" routerLink="/app">Ouvrir mon espace</a>
+      } @else {
+        <a class="btn ghost" routerLink="/login">Se connecter</a>
+        <a class="btn primary" routerLink="/register">Créer un compte</a>
+      }
+    </div>
+  </header>
+
+  <!-- ===================== Accroche ===================== -->
+  <section class="hero">
+    <div class="hero-text">
+      <span class="badge"><span class="pulse"></span> Assistant IA de création de CV</span>
+      <h1>Ton CV professionnel, <span class="grad">en une simple conversation</span></h1>
+      <p class="lead">
+        Parle de ton parcours comme à un conseiller carrière. CV Studio collecte tes informations, enrichit tes
+        expériences et génère un CV PDF élégant, sans jamais rien inventer.
+      </p>
+      <div class="hero-cta">
+        @if (auth.isLoggedIn()) {
+          <a class="btn primary lg" routerLink="/app">Continuer, {{ auth.firstName() }}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        } @else {
+          <a class="btn primary lg" routerLink="/register">Créer mon CV gratuitement
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+          <a class="btn ghost lg" routerLink="/login">J'ai déjà un compte</a>
+        }
+      </div>
+      <ul class="proof">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> Gratuit</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> PDF en moins d'une minute</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> Historique de tes CV</li>
+      </ul>
+    </div>
+
+    <!-- Aperçu du produit -->
+    <div class="hero-visual" aria-hidden="true">
+      <div class="mock chat-mock">
+        <div class="mock-bar"><i></i><i></i><i></i></div>
+        <div class="m-msg bot">Parle-moi de ton dernier stage 🙂</div>
+        <div class="m-msg me">Stage chez Elyadata en août 2025, 2 mois, agents IA avec LangGraph</div>
+        <div class="m-msg bot">
+          Proposition :
+          <em>« Conception d'agents IA autonomes avec LangGraph et LangChain. »</em>
+          Ça te va ?
+        </div>
+        <div class="m-msg me short">Oui, parfait !</div>
+      </div>
+      <div class="mock cv-mock">
+        <div class="cv-head">
+          <div class="cv-name"></div>
+          <div class="cv-line w60"></div>
+        </div>
+        <div class="cv-section"></div>
+        <div class="cv-line"></div>
+        <div class="cv-line w80"></div>
+        <div class="cv-section"></div>
+        <div class="cv-line w70"></div>
+        <div class="cv-line w90"></div>
+        <div class="cv-line w50"></div>
+        <div class="cv-tag">PDF</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== Fonctionnalités ===================== -->
+  <section class="section" id="fonctionnalites">
+    <div class="section-head">
+      <span class="eyebrow">Fonctionnalités</span>
+      <h2>Tout ce qu'il faut pour un CV qui se démarque</h2>
+    </div>
+    <div class="features">
+      @for (f of features; track f.title) {
+        <article class="feature">
+          <div class="f-icon">
+            @switch (f.icon) {
+              @case ('chat') { <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> }
+              @case ('spark') { <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg> }
+              @case ('shield') { <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg> }
+              @case ('pdf') { <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3 3 3-3"/></svg> }
+            }
+          </div>
+          <h3>{{ f.title }}</h3>
+          <p>{{ f.text }}</p>
+        </article>
+      }
+    </div>
+  </section>
+
+  <!-- ===================== Étapes ===================== -->
+  <section class="section" id="etapes">
+    <div class="section-head">
+      <span class="eyebrow">Comment ça marche</span>
+      <h2>Trois étapes, quelques minutes</h2>
+    </div>
+    <div class="steps">
+      @for (s of steps; track s.title; let i = $index) {
+        <div class="step">
+          <span class="step-num">{{ i + 1 }}</span>
+          <h3>{{ s.title }}</h3>
+          <p>{{ s.text }}</p>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- ===================== Appel à l'action ===================== -->
+  <section class="cta">
+    <h2>Prêt à créer ton CV ?</h2>
+    <p>Rejoins CV Studio et obtiens un CV professionnel dès aujourd'hui.</p>
+    @if (auth.isLoggedIn()) {
+      <a class="btn white lg" routerLink="/app">Ouvrir mon espace</a>
+    } @else {
+      <a class="btn white lg" routerLink="/register">Commencer gratuitement</a>
+    }
+  </section>
+
+  <footer class="footer">
+    <span>© {{ year }} CV Studio</span>
+    <span>Assistant IA de création de CV</span>
+  </footer>
+</div>

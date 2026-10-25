@@ -1,0 +1,119 @@
+<div class="auth">
+  <!-- ===================== Présentation ===================== -->
+  <aside class="showcase">
+    <a class="brand" routerLink="/">
+      <span class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      </span>
+      CV Studio
+    </a>
+
+    <div class="showcase-body">
+      <h2>{{ isRegister() ? 'Rejoins CV Studio' : 'Content de te revoir' }}</h2>
+      <p>
+        {{ isRegister()
+          ? 'Crée ton compte et obtiens un CV professionnel en discutant avec un assistant IA.'
+          : 'Retrouve ton assistant et l\'historique de tous tes CV générés.' }}
+      </p>
+
+      <ul class="perks">
+        <li>
+          <span class="perk-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div><strong>Conversation naturelle</strong><span>Raconte ton parcours avec tes mots.</span></div>
+        </li>
+        <li>
+          <span class="perk-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
+          <div><strong>Rien d'inventé</strong><span>Chaque information vient de toi.</span></div>
+        </li>
+        <li>
+          <span class="perk-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3 3 3-3"/></svg></span>
+          <div><strong>PDF + historique</strong><span>Tous tes CV, toujours disponibles.</span></div>
+        </li>
+      </ul>
+    </div>
+
+    <p class="showcase-foot">Ton CV professionnel, en toute simplicité.</p>
+  </aside>
+
+  <!-- ===================== Formulaire ===================== -->
+  <main class="form-side">
+    <a class="back" routerLink="/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+      Accueil
+    </a>
+
+    <form class="card" (ngSubmit)="submit()" novalidate>
+      <h1>{{ isRegister() ? 'Créer un compte' : 'Se connecter' }}</h1>
+      <p class="sub">
+        @if (isRegister()) {
+          Déjà inscrit ? <a routerLink="/login">Se connecter</a>
+        } @else {
+          Pas encore de compte ? <a routerLink="/register">Créer un compte</a>
+        }
+      </p>
+
+      @if (error()) {
+        <div class="alert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+          {{ error() }}
+        </div>
+      }
+
+      @if (isRegister()) {
+        <label class="field">
+          <span>Nom complet</span>
+          <div class="input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            <input name="name" autocomplete="name" placeholder="Mohamed Brahim Garram"
+                   [ngModel]="name()" (ngModelChange)="name.set($event)" />
+          </div>
+        </label>
+      }
+
+      <label class="field">
+        <span>Adresse e-mail</span>
+        <div class="input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+          <input name="email" type="email" autocomplete="email" placeholder="toi@exemple.com"
+                 [ngModel]="email()" (ngModelChange)="email.set($event)" />
+        </div>
+      </label>
+
+      <label class="field">
+        <span>Mot de passe</span>
+        <div class="input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          <input name="password" [type]="showPassword() ? 'text' : 'password'"
+                 [autocomplete]="isRegister() ? 'new-password' : 'current-password'"
+                 [placeholder]="isRegister() ? 'Au moins 8 caractères' : 'Ton mot de passe'"
+                 [ngModel]="password()" (ngModelChange)="password.set($event)" />
+          <button type="button" class="eye" (click)="showPassword.set(!showPassword())"
+                  [title]="showPassword() ? 'Masquer' : 'Afficher'">
+            @if (showPassword()) {
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 5.4-1.6"/></svg>
+            } @else {
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            }
+          </button>
+        </div>
+        @if (isRegister() && password()) {
+          <div class="strength" [attr.data-level]="strength()">
+            <div class="bars"><i></i><i></i><i></i><i></i></div>
+            <span>{{ strengthLabel() }}</span>
+          </div>
+        }
+      </label>
+
+      <button class="submit" type="submit" [disabled]="!canSubmit()">
+        @if (loading()) {
+          <span class="spinner"></span>
+        } @else {
+          {{ isRegister() ? 'Créer mon compte' : 'Se connecter' }}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        }
+      </button>
+
+      <p class="legal">Tes données restent privées : seul toi as accès à tes CV.</p>
+    </form>
+  </main>
+</div>

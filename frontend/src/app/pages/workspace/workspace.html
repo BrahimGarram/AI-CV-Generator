@@ -1,0 +1,243 @@
+<div class="app">
+  <!-- ===================== En-tête ===================== -->
+  <header class="topbar">
+    <div class="brand">
+      <button class="icon-btn sidebar-toggle" (click)="sidebarOpen.set(!sidebarOpen())" title="Mes CV">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <a class="logo" routerLink="/" title="Accueil">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      </a>
+      <div>
+        <h1>CV Studio</h1>
+        <span class="subtitle">Assistant IA de création de CV</span>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      @if (online() === false) {
+        <span class="status off">
+          <span class="status-dot"></span>
+          Service momentanément indisponible
+        </span>
+      }
+      <button class="icon-btn panel-toggle" (click)="panelOpen.set(!panelOpen())" title="Afficher le CV">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg>
+      </button>
+
+      <div class="user-menu">
+        <button class="user-btn" (click)="userMenu.set(!userMenu())">
+          <span class="user-avatar">{{ auth.initials() }}</span>
+          <span class="user-name">{{ auth.user()?.name }}</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        @if (userMenu()) {
+          <div class="menu-backdrop" (click)="userMenu.set(false)"></div>
+          <div class="menu">
+            <div class="menu-head">
+              <strong>{{ auth.user()?.name }}</strong>
+              <span>{{ auth.user()?.email }}</span>
+            </div>
+            <div class="menu-stat">{{ auth.user()?.cv_count ?? 0 }} CV générés</div>
+            <a class="menu-item" routerLink="/">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+              Page d'accueil
+            </a>
+            <button class="menu-item danger" (click)="logout()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+              Se déconnecter
+            </button>
+          </div>
+        }
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- ===================== Barre latérale : historique ===================== -->
+    <aside class="sidebar" [class.open]="sidebarOpen()">
+      <button class="new-cv" (click)="newConversation()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+        Nouveau CV
+      </button>
+
+      <div class="side-title">
+        <span>Mes CV</span>
+        @if (history().length) { <span class="count">{{ history().length }}</span> }
+      </div>
+
+      <div class="history">
+        @if (historyLoading()) {
+          @for (i of [1, 2, 3]; track i) { <div class="skeleton"></div> }
+        } @else if (!history().length) {
+          <div class="history-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+            <p>Tes CV générés apparaîtront ici.</p>
+          </div>
+        } @else {
+          @for (g of history(); track g.id) {
+            <div class="history-item" [class.active]="selectedId() === g.id" (click)="openGeneration(g)" role="button" tabindex="0" (keydown.enter)="openGeneration(g)">
+              <div class="doc-icon" [class.no-pdf]="!g.has_pdf">{{ g.has_pdf ? 'PDF' : 'TEX' }}</div>
+              <div class="history-text">
+                <strong>{{ g.title }}</strong>
+                <span>{{ g.created_at | date: 'd MMM y, HH:mm' }}</span>
+              </div>
+              @if (confirmDelete() === g.id) {
+                <button class="del confirm" (click)="deleteGeneration(g.id, $event)" title="Confirmer la suppression">Supprimer</button>
+              } @else {
+                <button class="del" (click)="askDelete(g.id, $event)" title="Supprimer">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                </button>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <div class="side-user">
+        <span class="user-avatar lg">{{ auth.initials() }}</span>
+        <div class="side-user-text">
+          <strong>{{ auth.user()?.name }}</strong>
+          <span>{{ auth.user()?.email }}</span>
+        </div>
+        <button class="icon-btn always" (click)="logout()" title="Se déconnecter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
+      </div>
+    </aside>
+    @if (sidebarOpen()) { <div class="backdrop" (click)="sidebarOpen.set(false)"></div> }
+
+    <!-- ===================== Chat ===================== -->
+    <section class="chat">
+      <div class="messages" #scroller>
+        <div class="messages-inner">
+          @if (!started()) {
+            <div class="hero">
+              <div class="hero-badge">Ton assistant carrière personnel</div>
+              <h2>Bonjour {{ auth.firstName() }}, crée ton CV <span class="grad">professionnel</span></h2>
+              <p>Raconte ton parcours avec tes mots. L'assistant pose les bonnes questions, reformule tes expériences et génère ton CV en LaTeX.</p>
+            </div>
+          }
+
+          @for (m of messages(); track $index) {
+            @if (m.role === 'cv' && m.cv) {
+              <!-- ===== CV généré : aperçu PDF dans la discussion ===== -->
+              <div class="msg assistant">
+                <div class="msg-avatar">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.9 5.8L20 9.7l-5 3.6 1.9 5.8L12 15.5l-4.9 3.6L9 13.3l-5-3.6 6.1-1.9z"/></svg>
+                </div>
+                <div class="cv-card">
+                  <div class="cv-card-head">
+                    <div class="pdf-icon">PDF</div>
+                    <div class="cv-card-title">
+                      <strong>{{ m.cv.fileName }}</strong>
+                      <span>{{ m.cv.pdfObjectUrl ? 'Ton CV est prêt' : 'PDF indisponible' }}</span>
+                    </div>
+                  </div>
+
+                  @if (m.cv.pdfObjectUrl) {
+                    <div class="pdf-frame">
+                      <iframe [src]="m.cv.pdfObjectUrl + '#toolbar=0&navpanes=0&view=FitH' | safeResource" title="Aperçu du CV"></iframe>
+                    </div>
+                    <div class="cv-card-actions">
+                      <button class="btn-main" (click)="download(m.cv.pdfObjectUrl, m.cv.fileName)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+                        Télécharger le PDF
+                      </button>
+                      <button class="btn-soft" (click)="openPdf(m.cv.pdfObjectUrl)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                        Plein écran
+                      </button>
+                    </div>
+                  } @else {
+                    <p class="cv-card-error">Le PDF n'a pas pu être créé pour le moment. Réessaie avec « Générer le CV maintenant ».</p>
+                    <div class="cv-card-actions">
+                      <button class="btn-soft" (click)="downloadTex(m.cv.texUrl, m.cv.fileName)">Télécharger la source .tex</button>
+                    </div>
+                  }
+                </div>
+              </div>
+            } @else {
+            <div class="msg" [class]="m.role">
+              @if (m.role === 'assistant') {
+                <div class="msg-avatar">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.9 5.8L20 9.7l-5 3.6 1.9 5.8L12 15.5l-4.9 3.6L9 13.3l-5-3.6 6.1-1.9z"/></svg>
+                </div>
+              }
+              <div class="bubble">
+                @if (m.role === 'error') {
+                  <div class="error-head">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+                    Un problème est survenu
+                  </div>
+                  <p>{{ m.content }}</p>
+                  <button class="link" (click)="retry()">Réessayer</button>
+                } @else {
+                  <div class="content" [innerHTML]="m.content | chatFormat"></div>
+                }
+              </div>
+            </div>
+            }
+          }
+
+          @if (sending()) {
+            <div class="msg assistant">
+              <div class="msg-avatar">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.9 5.8L20 9.7l-5 3.6 1.9 5.8L12 15.5l-4.9 3.6L9 13.3l-5-3.6 6.1-1.9z"/></svg>
+              </div>
+              <div class="bubble typing">
+                <span class="dots"><i></i><i></i><i></i></span>
+                @if (waitingLong()) { <span class="typing-text">Génération en cours, cela peut prendre jusqu'à une minute…</span> }
+              </div>
+            </div>
+          }
+
+          @if (!started() && sessionId()) {
+            <div class="suggestions">
+              @for (s of suggestions; track s.title) {
+                <button class="suggestion" (click)="useSuggestion(s.text)">
+                  <strong>{{ s.title }}</strong>
+                  <span>{{ s.text }}</span>
+                </button>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- ===================== Zone de saisie ===================== -->
+      <div class="composer-wrap">
+        <form class="composer" (submit)="$event.preventDefault(); send()">
+          <textarea
+            #composer
+            rows="1"
+            placeholder="Écris ton message… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)"
+            [ngModel]="draft()"
+            (ngModelChange)="draft.set($event); autoResize()"
+            name="draft"
+            (keydown)="onKeydown($event)"
+            [disabled]="!sessionId()"
+          ></textarea>
+          <button class="send" type="submit" [disabled]="!canSend()" title="Envoyer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+        <p class="hint">L'assistant n'invente rien : tout ce qui apparaît dans ton CV vient de tes réponses.</p>
+      </div>
+    </section>
+
+    <!-- ===================== Panneau CV ===================== -->
+    <div class="side" [class.open]="panelOpen()">
+      <app-cv-panel
+        [cv]="cv()"
+        [result]="generated()"
+        [generating]="generating()"
+        [canGenerate]="canGenerate()"
+        (generate)="generateNow()"
+        (download)="download($event.url, $event.fileName)"
+        (openPdf)="openPdf($event)"
+      />
+    </div>
+    @if (panelOpen()) { <div class="backdrop" (click)="panelOpen.set(false)"></div> }
+  </main>
+</div>

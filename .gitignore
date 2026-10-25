@@ -1,0 +1,53 @@
+# ==========================================================
+#  CV Studio — fichiers à ne pas versionner
+#  (le frontend a aussi son propre frontend/.gitignore)
+# ==========================================================
+
+# ---- Secrets : ne jamais publier ----
+.env
+.env.*
+.env.example
+*.key
+
+# ---- Python ----
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# ---- Données des utilisateurs (comptes, mots de passe hachés, CV) ----
+data/
+*.db
+*.sqlite3
+
+# ---- Sorties générées ----
+# On ignore tout le dossier output/ SAUF le modèle fine-tuné,
+# pour que le projet fonctionne après un clone sans réentraîner (~45 min).
+output/*
+!output/cv-latex-lora/
+output/cv-latex-lora/checkpoints/
+*.log
+*.aux
+*.out
+
+# ---- Moteur LaTeX local éventuel (Tectonic) ----
+tools/
+
+# ---- Frontend Angular ----
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# ---- IDE / système ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
